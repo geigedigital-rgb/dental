@@ -1,9 +1,14 @@
 {
-  "name": "dental-monorepo",
+  "name": "dental-warehouse",
   "private": true,
-  "description": "Backend и frontend в подпапках backend/ и frontend/. Не собирайте из корня.",
+  "description": "Склад стоматологической клиники: backend (NestJS) + frontend (Vite/React). Один деплой — бэкенд отдаёт API и статику.",
   "scripts": {
-    "build": "echo '\n\n>>> МОНОРЕПО: укажите Root Directory в Railway.\n    Сервис Backend: Root Directory = backend\n    Сервис Frontend: Root Directory = frontend\n    Настройки сервиса → Source → Root Directory\n    См. docs/DEPLOY-RAILWAY.md\n\n' && exit 1",
-    "start": "echo 'Укажите Root Directory в настройках сервиса (backend или frontend)' && exit 1"
+    "build": "cd frontend && npm ci && npm run build && cd ../backend && npm ci && npm run build && cd .. && mkdir -p backend/public && cp -r frontend/dist/* backend/public/",
+    "start": "cd backend && npm run start:prod",
+    "dev:backend": "cd backend && npm run start:dev",
+    "dev:frontend": "cd frontend && npm run dev"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

@@ -31,11 +31,12 @@ cd frontend && npm run dev
 
 (В первом терминале бэкенд уйдёт в фон, во втором — запустите фронтенд в том же или в новом терминале.)
 
-Или из корня проекта:
+Или из корня проекта (в двух терминалах):
 
 ```bash
-cd /Users/vlad/Documents/коды/dental/dental/backend && npm run start:dev &
-cd /Users/vlad/Documents/коды/dental/dental/frontend && npm run dev
+npm run dev:backend
+# и
+npm run dev:frontend
 ```
 
 ---
@@ -44,4 +45,4 @@ cd /Users/vlad/Documents/коды/dental/dental/frontend && npm run dev
 
 Подробная инструкция: **[docs/DEPLOY-RAILWAY.md](docs/DEPLOY-RAILWAY.md)**.
 
-Кратко: два сервиса — **backend** (root `backend`, build `npm run build`, start `npm run start:prod`) и **frontend** (root `frontend`, build `npm run build`, start `npm run start`). В бэкенде задать `DATABASE_URL`, `JWT_SECRET`, при необходимости `CORS_ORIGIN` и `NODE_ENV`. Во фронтенде при сборке задать `VITE_API_URL` — публичный URL бэкенда.
+Кратко: **один сервис** из корня репозитория. Build: `npm run build`, Start: `npm run start`. В Variables задать `DATABASE_URL` и `JWT_SECRET`. Фронт и API отдаются с одного домена.

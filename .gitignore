@@ -8,4 +8,5 @@ frontend/.env
 *.log
 .DS_Store
 backend/dist/
+backend/public/
 frontend/dist/

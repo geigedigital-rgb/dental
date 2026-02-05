@@ -1,99 +1,57 @@
 # Деплой на Railway
 
-Проект состоит из двух частей: **backend** (NestJS API) и **frontend** (Vite + React). На Railway их разворачивают **двумя отдельными сервисами** с разными корневыми папками.
+Один сервис: бэкенд (NestJS) отдаёт API и собранный фронтенд (Vite/React). Сборка из **корня репозитория**.
 
 ---
 
-## ⚠️ Важно: почему «Script start.sh not found» / «could not determine how to build»
+## 1. Настройка в Railway
 
-В корне репозитория нет одного приложения — только папки `backend/` и `frontend/`. Railpack/Nixpacks анализирует корень и не находит, что собирать.
-
-**Решение:** создайте на Railway **два сервиса** и для каждого укажите **Root Directory**:
-- для бэкенда: **Root Directory = `backend`**
-- для фронтенда: **Root Directory = `frontend`**
-
-**Где указать Root Directory в Railway:**
-1. Откройте ваш проект → выберите сервис (Backend или Frontend).
-2. Вкладка **Settings** (Настройки).
-3. Секция **Source** (Источник).
-4. Поле **Root Directory** — введите `backend` или `frontend` (без слэша) и сохраните.
-5. Запустите деплой заново (Redeploy).
-
-Не деплойте из корня репозитория без указания Root Directory.
-
----
-
-## 1. Подготовка репозитория
-
-- В корне лежат папки `backend/` и `frontend/`.
-- Секреты не коммитятся: в репозитории есть только `.env.example` в `backend/` и `frontend/`.
-- Все переменные окружения задаются в Railway **Variables** для каждого сервиса.
-
----
-
-## 2. Сервис Backend
-
-### Настройка в Railway
-
-- **Root Directory:** `backend`
-- **Build Command:** `npm install && npm run build`
-- **Start Command:** `npm run start:prod`
-- **Watch Paths:** `backend/**` (если используете монорепо)
-
-### Переменные окружения (Variables)
-
-| Переменная      | Обязательно | Описание |
-|-----------------|-------------|----------|
-| `DATABASE_URL`  | Да          | URL PostgreSQL (Neon или Railway Postgres). Пример: `postgresql://user:pass@host/db?sslmode=require` |
-| `JWT_SECRET`    | Да          | Секрет для подписи JWT. Локально можно тестовый, в проде — длинная случайная строка |
-| `PORT`          | Нет         | Railway подставляет сам. Оставлять пустым или не указывать |
-| `CORS_ORIGIN`   | Рекомендуется | URL фронтенда через запятую. Пример: `https://your-frontend.railway.app` |
-| `NODE_ENV`      | Нет         | Для продакшена можно задать `production` |
-
-### Что делают скрипты
-
-- `postinstall` — вызывает `prisma generate` после `npm install`.
-- `build` — генерирует Prisma-клиент и собирает NestJS.
-- `start:prod` — выполняет `prisma migrate deploy` (применяет миграции к БД) и запускает `nest start`.
-
----
-
-## 3. Сервис Frontend
-
-### Настройка в Railway
-
-- **Root Directory:** `frontend`
-- **Build Command:** `npm install && npm run build`
+- **Root Directory:** не указывать (корень репозитория)
+- **Build Command:** `npm run build`
 - **Start Command:** `npm run start`
-- **Watch Paths:** `frontend/**` (если монорепо)
 
-### Переменные окружения (Variables)
+Сборка: устанавливаются зависимости фронта и бэка, собирается фронт, собирается бэк, статика копируется в `backend/public`. Старт: запускается бэкенд (миграции + Nest), он отдаёт `/api/*` и статику SPA с одного домена.
+
+---
+
+## 2. Переменные окружения (Variables)
 
 | Переменная     | Обязательно | Описание |
 |----------------|-------------|----------|
-| `VITE_API_URL` | Да (в проде) | Публичный URL бэкенда **без** слэша в конце. Пример: `https://your-backend.railway.app` |
+| `DATABASE_URL` | Да          | URL PostgreSQL (Neon или Railway Postgres). Пример: `postgresql://user:pass@host/db?sslmode=require` |
+| `JWT_SECRET`   | Да          | Секрет для подписи JWT |
+| `PORT`         | Нет         | Railway подставляет сам |
+| `NODE_ENV`     | Нет         | Для продакшена можно задать `production` |
 
-При сборке Vite подставит `VITE_API_URL` в код. Без этой переменной сборка будет использовать относительный путь `/api` (подходит только если фронт и бэк хостятся на одном домене с проксированием).
-
-### Что делают скрипты
-
-- `build` — компиляция TypeScript и сборка Vite (результат в `dist/`).
-- `start` — запуск статического сервера `serve -s dist` (читает `PORT` из окружения Railway).
+`VITE_API_URL` и `CORS_ORIGIN` не нужны: фронт и API на одном домене.
 
 ---
 
-## 4. Порядок деплоя
+## 3. Порядок деплоя
 
-1. Создать БД (Neon или Railway Postgres) и скопировать `DATABASE_URL`.
-2. Создать сервис **Backend**, указать Root Directory `backend`, переменные, Build и Start команды. Дождаться успешного деплоя и скопировать публичный URL бэкенда.
-3. Создать сервис **Frontend**, указать Root Directory `frontend`, задать `VITE_API_URL` = URL бэкенда (из шага 2), указать Build и Start команды.
-4. В бэкенде в `CORS_ORIGIN` прописать URL фронтенда (из шага 3).
-5. При необходимости перезапустить бэкенд после смены `CORS_ORIGIN`.
+1. Создать БД (Neon или Railway Postgres), скопировать `DATABASE_URL`.
+2. Создать один сервис из репозитория (Root Directory пустой).
+3. В Variables задать `DATABASE_URL` и `JWT_SECRET`.
+4. Деплой: Build = `npm run build`, Start = `npm run start`.
+
+После деплоя приложение доступно по одному URL (например `https://your-app.railway.app`).
 
 ---
 
-## 5. Локальный запуск (без изменений)
+## 4. Локальный запуск (без изменений)
 
-- **Backend:** `cd backend && npm install && npm run start:dev` (порт 3001, без миграций в проде).
-- **Frontend:** `cd frontend && npm install && npm run dev` (порт 3000, прокси `/api` на бэкенд).
-- Локально можно не задавать `VITE_API_URL` и `CORS_ORIGIN` — всё работает через прокси и разрешённые origins по умолчанию.
+Два терминала:
+
+```bash
+# Терминал 1 — бэкенд
+cd backend && npm install && npm run start:dev
+```
+
+```bash
+# Терминал 2 — фронтенд
+cd frontend && npm install && npm run dev
+```
+
+Или из корня: `npm run dev:backend` и `npm run dev:frontend` в разных терминалах.
+
+Открыть http://localhost:3000 — прокси перенаправляет `/api` на бэкенд.

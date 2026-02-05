@@ -16,6 +16,10 @@ import { SettingsModule } from './settings/settings.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'public'),
+      exclude: ['/api*'],
+    }),
     PrismaModule,
     AuthModule,
     UsersModule,
