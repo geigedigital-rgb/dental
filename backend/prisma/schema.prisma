@@ -1,0 +1,296 @@
+// Dental Clinic Warehouse - Prisma Schema
+// Production-ready, normalized schema with audit and soft deletes
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============== USERS & AUTH ==============
+
+model Role {
+  id        String   @id @default(uuid())
+  name      String   @unique // admin, manager, doctor, viewer
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id])
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  auditLogs    AuditLog[]
+  stockEntries StockEntry[]
+  writeOffs    WriteOff[]
+  serviceSales ServiceSale[]
+}
+
+// ============== MATERIALS & SUPPLIERS ==============
+
+// Классификация: тип материала (адгезив, цемент СИЦ и т.д.). Один тип — много спецификаций (конкретных товаров от поставщиков).
+model MaterialType {
+  id          String   @id @default(uuid())
+  name        String   // напр. "Адгезив тотальное протравливание", "Цемент стеклоиономерный"
+  description String?
+  parentId    String?
+  parent      MaterialType?  @relation("MaterialTypeHierarchy", fields: [parentId], references: [id])
+  children    MaterialType[]  @relation("MaterialTypeHierarchy")
+  sortOrder   Int      @default(0)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  materials   Material[]
+}
+
+model Material {
+  id                   String   @id @default(uuid())
+  materialTypeId       String   // тип (категория): Адгезив, Цемент, Анестетик
+  materialType         MaterialType @relation(fields: [materialTypeId], references: [id])
+  name                 String   // маркировка (бренд), напр. "Single Bond Universal (3M)"
+  unit                 String   // ед. учета (списания): Карпула (шт), Флакон (шт), Шприц (шт) — как выдаём врачу
+  purchaseUnit         String?  // ед. закупки: Коробка (50), Флакон, Шприц — как приходит в накладной
+  purchaseUnitRatio    Decimal  @default(1) @db.Decimal(12, 4) // сколько ед. учета в 1 ед. закупки (50 = 1 коробка → 50 карпул)
+  country              String?  // страна производства
+  description       String?  // краткое назначение
+  minStockThreshold Decimal  @default(0) @db.Decimal(12, 4)
+  averageCost       Decimal  @default(0) @db.Decimal(12, 4) // WAC
+  isArchived        Boolean  @default(false)
+  deletedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  stockMovements    StockMovement[]
+  stockEntryItems   StockEntryItem[]
+  serviceMaterials  ServiceMaterial[]
+  writeOffs         WriteOff[]
+  saleSnapshots    ServiceSaleMaterialSnapshot[]
+  lots              MaterialLot[]
+}
+
+model Supplier {
+  id          String   @id @default(uuid())
+  name        String
+  contactInfo String?  // JSON or text: phone, email, address
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stockEntries StockEntry[]
+}
+
+// ============== STOCK (Goods receipt & movements) ==============
+
+model StockEntry {
+  id           String   @id @default(uuid())
+  supplierId   String
+  supplier     Supplier @relation(fields: [supplierId], references: [id])
+  entryDate    DateTime
+  note         String?
+  deliveryCost Decimal  @default(0) @db.Decimal(12, 4) // оплата доставки (грн), опционально
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdById  String?
+  createdBy    User?    @relation(fields: [createdById], references: [id])
+
+  items    StockEntryItem[]
+  movements StockMovement[] @relation("StockEntryMovement")
+}
+
+model StockEntryItem {
+  id            String   @id @default(uuid())
+  stockEntryId  String
+  stockEntry    StockEntry @relation(fields: [stockEntryId], references: [id], onDelete: Cascade)
+  materialId   String
+  material     Material  @relation(fields: [materialId], references: [id])
+  quantity     Decimal   @db.Decimal(12, 4)
+  unitPrice    Decimal   @db.Decimal(12, 4)
+  expiryDate   DateTime? // для FEFO: срок годности партии
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  lots         MaterialLot[]
+
+  @@unique([stockEntryId, materialId])
+}
+
+// Партия материала: одна строка прихода с ценой и (опционально) сроком годности. Для FIFO/FEFO.
+model MaterialLot {
+  id                String   @id @default(uuid())
+  materialId        String
+  material          Material @relation(fields: [materialId], references: [id])
+  quantity          Decimal  @db.Decimal(12, 4) // остаток в партии
+  unitCost          Decimal  @db.Decimal(12, 4) // цена прихода
+  receivedAt        DateTime
+  expiryDate        DateTime?
+  stockEntryId      String?
+  stockEntryItemId  String?
+  stockEntryItem    StockEntryItem? @relation(fields: [stockEntryItemId], references: [id], onDelete: SetNull)
+  createdAt         DateTime @default(now())
+
+  @@index([materialId])
+  @@index([materialId, receivedAt])
+  @@index([materialId, expiryDate])
+}
+
+enum StockMovementType {
+  IN
+  OUT
+}
+
+enum StockMovementSourceType {
+  STOCK_ENTRY
+  WRITE_OFF
+  SERVICE_SALE
+}
+
+model StockMovement {
+  id            String   @id @default(uuid())
+  materialId    String
+  material      Material @relation(fields: [materialId], references: [id])
+  type          StockMovementType
+  quantity      Decimal  @db.Decimal(12, 4)
+  unitCost      Decimal  @db.Decimal(12, 4)
+  sourceType    StockMovementSourceType
+  sourceId      String?
+  stockEntryId  String?
+  stockEntry    StockEntry?  @relation("StockEntryMovement", fields: [stockEntryId], references: [id])
+  writeOffId    String?
+  writeOff      WriteOff?    @relation(fields: [writeOffId], references: [id])
+  serviceSaleId String?
+  serviceSale   ServiceSale? @relation(fields: [serviceSaleId], references: [id])
+  movementDate  DateTime
+  note          String?
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([materialId, movementDate])
+  @@index([sourceType])
+  @@index([stockEntryId])
+  @@index([writeOffId])
+  @@index([serviceSaleId])
+}
+
+// ============== MANUAL WRITE-OFF ==============
+
+model WriteOff {
+  id           String   @id @default(uuid())
+  materialId   String
+  material     Material @relation(fields: [materialId], references: [id])
+  quantity     Decimal  @db.Decimal(12, 4)
+  reason       String
+  writeOffDate DateTime
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdById  String?
+  createdBy    User?    @relation(fields: [createdById], references: [id])
+
+  movements StockMovement[]
+}
+
+// ============== SERVICES (Dental procedures) ==============
+
+model Service {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  basePrice   Decimal  @db.Decimal(12, 2) // editable suggested price
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  materials ServiceMaterial[]
+  sales     ServiceSale[]
+}
+
+model ServiceMaterial {
+  id         String   @id @default(uuid())
+  serviceId  String
+  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  materialId String
+  material   Material @relation(fields: [materialId], references: [id])
+  quantity   Decimal  @db.Decimal(12, 4) // per one service
+  deletedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([serviceId, materialId])
+}
+
+// ============== SERVICE SALES (with cost snapshots) ==============
+
+model ServiceSale {
+  id                String   @id @default(uuid())
+  serviceId         String
+  service           Service  @relation(fields: [serviceId], references: [id])
+  saleDate          DateTime
+  salePrice         Decimal  @db.Decimal(12, 2) // общая сумма продажи
+  laborAmount       Decimal  @db.Decimal(12, 2) // услуга стоматолога (из общей суммы)
+  materialCostTotal Decimal  @db.Decimal(12, 4) // сумма себестоимости материалов (WAC)
+  grossMargin       Decimal  @db.Decimal(12, 4) // salePrice - materialCostTotal
+  marginPercent     Decimal  @db.Decimal(8, 2)
+  note              String?
+  deletedAt         DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdById       String?
+  createdBy         User?    @relation(fields: [createdById], references: [id])
+
+  materialSnapshots ServiceSaleMaterialSnapshot[]
+  movements         StockMovement[]
+}
+
+model ServiceSaleMaterialSnapshot {
+  id                 String   @id @default(uuid())
+  serviceSaleId      String
+  serviceSale        ServiceSale @relation(fields: [serviceSaleId], references: [id], onDelete: Cascade)
+  materialId         String
+  material           Material @relation(fields: [materialId], references: [id])
+  quantity           Decimal  @db.Decimal(12, 4)
+  unitCostSnapshot   Decimal  @db.Decimal(12, 4) // WAC на момент продажи
+  totalCost          Decimal  @db.Decimal(12, 4) // quantity * unitCostSnapshot
+  assignedSaleAmount Decimal  @db.Decimal(12, 2) // часть общей суммы, назначенная на этот материал (цена списания)
+  deletedAt          DateTime?
+  createdAt          DateTime @default(now())
+
+  @@index([serviceSaleId])
+}
+
+// ============== SETTINGS ==============
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique // напр. inventory.write_off_method
+  value     String   // FIFO | AVERAGE, true | false, FEFO | NONE
+  updatedAt DateTime @updatedAt
+}
+
+// ============== AUDIT ==============
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String   // CREATE_STOCK_ENTRY, WRITE_OFF, SERVICE_SALE, etc.
+  entityType String
+  entityId   String?
+  payload    String?  // JSON
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
