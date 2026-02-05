@@ -953,8 +953,6 @@ function ServiceSalesPanel() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [unallocatedConfirmAmount, setUnallocatedConfirmAmount] = useState<number | null>(null);
   const [showDeleteSaleConfirm, setShowDeleteSaleConfirm] = useState(false);
-  const [showDeleteEntryConfirm, setShowDeleteEntryConfirm] = useState(false);
-  const [showDeleteWriteOffConfirm, setShowDeleteWriteOffConfirm] = useState(false);
 
   const safeSelected = lines.length === 0 ? -1 : Math.min(selectedIndex, lines.length - 1);
   const form = safeSelected >= 0 ? lines[safeSelected] : null;

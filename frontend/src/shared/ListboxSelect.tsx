@@ -57,7 +57,6 @@ export function ListboxSelect({
           >
             <Listbox.Options
               className="absolute z-50 mt-0.5 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white py-0.5 text-sm shadow-sm focus:outline-none"
-              role="listbox"
             >
               {options.map((opt) => (
                 <Listbox.Option
