@@ -1,0 +1,9 @@
+{
+  "name": "dental-monorepo",
+  "private": true,
+  "description": "Backend и frontend в подпапках backend/ и frontend/. Не собирайте из корня.",
+  "scripts": {
+    "build": "echo '\n\n>>> МОНОРЕПО: укажите Root Directory в Railway.\n    Сервис Backend: Root Directory = backend\n    Сервис Frontend: Root Directory = frontend\n    Настройки сервиса → Source → Root Directory\n    См. docs/DEPLOY-RAILWAY.md\n\n' && exit 1",
+    "start": "echo 'Укажите Root Directory в настройках сервиса (backend или frontend)' && exit 1"
+  }
+}

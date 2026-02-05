@@ -12,6 +12,13 @@
 - для бэкенда: **Root Directory = `backend`**
 - для фронтенда: **Root Directory = `frontend`**
 
+**Где указать Root Directory в Railway:**
+1. Откройте ваш проект → выберите сервис (Backend или Frontend).
+2. Вкладка **Settings** (Настройки).
+3. Секция **Source** (Источник).
+4. Поле **Root Directory** — введите `backend` или `frontend` (без слэша) и сохраните.
+5. Запустите деплой заново (Redeploy).
+
 Не деплойте из корня репозитория без указания Root Directory.
 
 ---
