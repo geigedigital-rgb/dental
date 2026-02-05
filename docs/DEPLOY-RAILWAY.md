@@ -1,6 +1,18 @@
 # Деплой на Railway
 
-Проект состоит из двух частей: **backend** (NestJS API) и **frontend** (Vite + React). На Railway их удобно развернуть как два сервиса (или один монорепо с двумя сервисами).
+Проект состоит из двух частей: **backend** (NestJS API) и **frontend** (Vite + React). На Railway их разворачивают **двумя отдельными сервисами** с разными корневыми папками.
+
+---
+
+## ⚠️ Важно: почему «Script start.sh not found» / «could not determine how to build»
+
+В корне репозитория нет одного приложения — только папки `backend/` и `frontend/`. Railpack/Nixpacks анализирует корень и не находит, что собирать.
+
+**Решение:** создайте на Railway **два сервиса** и для каждого укажите **Root Directory**:
+- для бэкенда: **Root Directory = `backend`**
+- для фронтенда: **Root Directory = `frontend`**
+
+Не деплойте из корня репозитория без указания Root Directory.
 
 ---
 
