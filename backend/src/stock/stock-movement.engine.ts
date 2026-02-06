@@ -113,15 +113,6 @@ export class StockMovementEngine {
         );
       }
       return this.prisma.$transaction(async (tx) => {
-        const newLotQty = lotQty - qty;
-        if (newLotQty <= 0) {
-          await tx.materialLot.delete({ where: { id: lot.id } });
-        } else {
-          await tx.materialLot.update({
-            where: { id: lot.id },
-            data: { quantity: new Decimal(newLotQty) },
-          });
-        }
         const writeOff = await tx.writeOff.create({
           data: {
             materialId: params.materialId,
@@ -143,6 +134,15 @@ export class StockMovementEngine {
           movementDate: params.writeOffDate,
           note: params.reason,
         });
+        const newLotQty = lotQty - qty;
+        if (newLotQty <= 0) {
+          await tx.materialLot.delete({ where: { id: lot.id } });
+        } else {
+          await tx.materialLot.update({
+            where: { id: lot.id },
+            data: { quantity: new Decimal(newLotQty) },
+          });
+        }
         return tx.writeOff.findUnique({
           where: { id: writeOff.id },
           include: { material: true, materialLot: true },

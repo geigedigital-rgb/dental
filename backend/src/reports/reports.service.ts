@@ -299,7 +299,10 @@ export class ReportsService {
     };
   }
 
-  /** Денежный поток: поступления (выручка) и выплаты (закупки + доставка) по периодам */
+  /**
+   * Денежный поток: поступления (выручка) и выплаты (закупки + доставка) по периодам.
+   * Учитываются даты транзакций: saleDate для продаж, entryDate для приходов (в т.ч. задним числом), а не даты создания записей.
+   */
   async cashflow(
     from: Date,
     to: Date,
@@ -311,17 +314,17 @@ export class ReportsService {
     });
     const entries = await this.prisma.stockEntry.findMany({
       where: { deletedAt: null, entryDate: { gte: from, lte: to } },
-      include: { items: true },
+      include: { items: { where: { deletedAt: null } } },
     });
 
     const key = (d: Date) => {
       const x = new Date(d);
       if (groupBy === 'day') return x.toISOString().slice(0, 10);
       if (groupBy === 'week') {
-        const start = new Date(x); start.setDate(x.getDate() - x.getDay());
+        const start = new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate() - x.getUTCDay()));
         return start.toISOString().slice(0, 10);
       }
-      return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`;
+      return `${x.getUTCFullYear()}-${String(x.getUTCMonth() + 1).padStart(2, '0')}`;
     };
 
     const periods = new Map<string, { inflows: number; outflows: number }>();
@@ -360,34 +363,116 @@ export class ReportsService {
     };
   }
 
-  /** P&L (Profit & Loss): выручка, себестоимость, валовая прибыль, операционные расходы, чистая прибыль */
+  /**
+   * P&L (Profit & Loss) по стандарту фин.учёта: выручка, себестоимость, валовая прибыль,
+   * операционные расходы (доставка + списания), чистая прибыль. Все транзакции: продажи, приходы, списания.
+   * Возвращает разбивку по 12 месяцам года (даже с нулями) для полной картины.
+   */
   async pl(from: Date, to: Date) {
-    const sales = await this.prisma.serviceSale.findMany({
-      where: { deletedAt: null, saleDate: { gte: from, lte: to } },
-      select: { salePrice: true, materialCostTotal: true, grossMargin: true, laborAmount: true },
-    });
-    const entries = await this.prisma.stockEntry.findMany({
-      where: { deletedAt: null, entryDate: { gte: from, lte: to } },
-      select: { deliveryCost: true },
-    });
+    const year = from.getUTCFullYear();
+    const startOfYear = new Date(Date.UTC(year, 0, 1));
+    const endOfYear = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
 
-    const revenue = sales.reduce((s, x) => s + Number(x.salePrice), 0);
-    const cogs = sales.reduce((s, x) => s + Number(x.materialCostTotal), 0);
-    const grossProfit = sales.reduce((s, x) => s + Number(x.grossMargin), 0);
-    const operatingExpenses = entries.reduce((s, x) => s + Number(x.deliveryCost ?? 0), 0);
-    const netProfit = grossProfit - operatingExpenses;
+    const [sales, entries, writeOffMovements] = await Promise.all([
+      this.prisma.serviceSale.findMany({
+        where: { deletedAt: null, saleDate: { gte: startOfYear, lte: endOfYear } },
+        select: { saleDate: true, salePrice: true, materialCostTotal: true, grossMargin: true },
+      }),
+      this.prisma.stockEntry.findMany({
+        where: { deletedAt: null, entryDate: { gte: startOfYear, lte: endOfYear } },
+        include: { items: { where: { deletedAt: null } } },
+      }),
+      this.prisma.stockMovement.findMany({
+        where: {
+          deletedAt: null,
+          type: 'OUT',
+          sourceType: 'WRITE_OFF',
+          movementDate: { gte: startOfYear, lte: endOfYear },
+        },
+        select: { movementDate: true, quantity: true, unitCost: true },
+      }),
+    ]);
+
+    const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+
+    const byMonth = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      monthLabel: monthNames[i],
+      year,
+      revenue: 0,
+      cogs: 0,
+      grossProfit: 0,
+      purchases: 0,
+      delivery: 0,
+      writeOffs: 0,
+      operatingExpenses: 0,
+      netProfit: 0,
+      saleCount: 0,
+      entryCount: 0,
+      writeOffCount: 0,
+    }));
+
+    for (const s of sales) {
+      const m = new Date(s.saleDate).getMonth();
+      const rev = Number(s.salePrice);
+      const cogsVal = Number(s.materialCostTotal);
+      const gp = Number(s.grossMargin);
+      byMonth[m].revenue += rev;
+      byMonth[m].cogs += cogsVal;
+      byMonth[m].grossProfit += gp;
+      byMonth[m].saleCount += 1;
+    }
+
+    for (const e of entries) {
+      const m = new Date(e.entryDate).getUTCMonth();
+      let purchaseSum = 0;
+      for (const it of e.items) {
+        purchaseSum += Number(it.quantity) * Number(it.unitPrice);
+      }
+      byMonth[m].purchases += purchaseSum;
+      byMonth[m].delivery += Number(e.deliveryCost ?? 0);
+      byMonth[m].entryCount += 1;
+    }
+
+    for (const w of writeOffMovements) {
+      const m = new Date(w.movementDate).getUTCMonth();
+      const cost = Number(w.quantity) * Number(w.unitCost);
+      byMonth[m].writeOffs += cost;
+      byMonth[m].writeOffCount += 1;
+    }
+
+    for (let i = 0; i < 12; i++) {
+      byMonth[i].operatingExpenses = byMonth[i].delivery + byMonth[i].writeOffs;
+      byMonth[i].netProfit = byMonth[i].grossProfit - byMonth[i].operatingExpenses;
+    }
+
+    const deliveryTotal = byMonth.reduce((s, x) => s + x.delivery, 0);
+    const writeOffsTotal = byMonth.reduce((s, x) => s + x.writeOffs, 0);
+    const summary = {
+      revenue: byMonth.reduce((s, x) => s + x.revenue, 0),
+      cogs: byMonth.reduce((s, x) => s + x.cogs, 0),
+      grossProfit: byMonth.reduce((s, x) => s + x.grossProfit, 0),
+      purchases: byMonth.reduce((s, x) => s + x.purchases, 0),
+      delivery: deliveryTotal,
+      writeOffs: writeOffsTotal,
+      operatingExpenses: deliveryTotal + writeOffsTotal,
+      netProfit: 0 as number,
+      saleCount: byMonth.reduce((s, x) => s + x.saleCount, 0),
+      entryCount: byMonth.reduce((s, x) => s + x.entryCount, 0),
+      writeOffCount: byMonth.reduce((s, x) => s + x.writeOffCount, 0),
+      grossMarginPercent: 0 as number,
+      netMarginPercent: 0 as number,
+    };
+    summary.netProfit = summary.grossProfit - summary.operatingExpenses;
+    summary.grossMarginPercent = summary.revenue > 0 ? (summary.grossProfit / summary.revenue) * 100 : 0;
+    summary.netMarginPercent = summary.revenue > 0 ? (summary.netProfit / summary.revenue) * 100 : 0;
 
     return {
-      from,
-      to,
-      revenue,
-      cogs,
-      grossProfit,
-      grossMarginPercent: revenue > 0 ? (grossProfit / revenue) * 100 : 0,
-      operatingExpenses,
-      netProfit,
-      netMarginPercent: revenue > 0 ? (netProfit / revenue) * 100 : 0,
-      saleCount: sales.length,
+      year,
+      from: startOfYear,
+      to: endOfYear,
+      summary,
+      byMonth,
     };
   }
 
@@ -430,5 +515,106 @@ export class ReportsService {
       take: params.limit ?? 100,
       include: { user: { select: { fullName: true, email: true } } },
     });
+  }
+
+  /**
+   * Единое представление всех финансовых транзакций за период.
+   * Читает из живых таблиц (ServiceSale, StockEntry, StockMovement для списаний) — без копирования.
+   * Любое редактирование в исходных таблицах сразу отражается здесь.
+   */
+  async unifiedTransactions(from: Date, to: Date) {
+    const fromNorm = new Date(from);
+    const toNorm = new Date(to);
+
+    const [sales, entries, writeOffMovements] = await Promise.all([
+      this.prisma.serviceSale.findMany({
+        where: { deletedAt: null, saleDate: { gte: fromNorm, lte: toNorm } },
+        select: { id: true, saleDate: true, salePrice: true, service: { select: { name: true } } },
+      }),
+      this.prisma.stockEntry.findMany({
+        where: { deletedAt: null, entryDate: { gte: fromNorm, lte: toNorm } },
+        include: { supplier: true, items: { where: { deletedAt: null } } },
+      }),
+      this.prisma.stockMovement.findMany({
+        where: {
+          deletedAt: null,
+          type: 'OUT',
+          sourceType: 'WRITE_OFF',
+          movementDate: { gte: fromNorm, lte: toNorm },
+        },
+        select: { id: true, writeOffId: true, movementDate: true, quantity: true, unitCost: true },
+      }),
+    ]);
+
+    type Tx = {
+      date: string;
+      type: 'SALE' | 'ENTRY' | 'WRITE_OFF';
+      sourceId: string;
+      sourceType: string;
+      amountInflow: number;
+      amountOutflow: number;
+      label: string;
+      meta?: Record<string, unknown>;
+    };
+
+    const list: Tx[] = [];
+
+    for (const s of sales) {
+      const amount = Number(s.salePrice);
+      list.push({
+        date: new Date(s.saleDate).toISOString(),
+        type: 'SALE',
+        sourceId: s.id,
+        sourceType: 'ServiceSale',
+        amountInflow: amount,
+        amountOutflow: 0,
+        label: `Продажа${(s.service as any)?.name ? `: ${(s.service as any).name}` : ''}`,
+        meta: { serviceName: (s.service as any)?.name },
+      });
+    }
+
+    for (const e of entries) {
+      let out = Number(e.deliveryCost ?? 0);
+      for (const it of e.items) out += Number(it.quantity) * Number(it.unitPrice);
+      list.push({
+        date: new Date(e.entryDate).toISOString(),
+        type: 'ENTRY',
+        sourceId: e.id,
+        sourceType: 'StockEntry',
+        amountInflow: 0,
+        amountOutflow: out,
+        label: `Приход: ${(e.supplier as any)?.name ?? 'Поставщик'}`,
+        meta: { supplierName: (e.supplier as any)?.name, itemCount: e.items.length },
+      });
+    }
+
+    // Группируем движения списаний по writeOffId — один документ списания = одна транзакция
+    const byWriteOff = new Map<string, { date: Date; total: number }>();
+    for (const w of writeOffMovements) {
+      const wid = w.writeOffId ?? w.id;
+      const cost = Number(w.quantity) * Number(w.unitCost);
+      const d = new Date(w.movementDate);
+      if (!byWriteOff.has(wid)) {
+        byWriteOff.set(wid, { date: d, total: 0 });
+      }
+      const rec = byWriteOff.get(wid)!;
+      rec.total += cost;
+      if (d < rec.date) rec.date = d;
+    }
+    for (const [writeOffId, { date, total }] of byWriteOff) {
+      list.push({
+        date: date.toISOString(),
+        type: 'WRITE_OFF',
+        sourceId: writeOffId,
+        sourceType: 'WriteOff',
+        amountInflow: 0,
+        amountOutflow: total,
+        label: 'Списание',
+        meta: {},
+      });
+    }
+
+    list.sort((a, b) => a.date.localeCompare(b.date));
+    return { from: fromNorm.toISOString(), to: toNorm.toISOString(), transactions: list };
   }
 }

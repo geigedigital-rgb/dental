@@ -12,7 +12,7 @@ export class StockEntryItemDto {
 
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
+  @Min(0.0001, { message: 'Цена за единицу не может быть пустой или нулевой' })
   unitPrice: number;
 
   /** Срок годности партии (для FEFO) */

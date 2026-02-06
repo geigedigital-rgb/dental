@@ -81,6 +81,14 @@ export class ReportsController {
     );
   }
 
+  @Get('transactions')
+  unifiedTransactions(@Query('from') from: string, @Query('to') to: string) {
+    return this.reportsService.unifiedTransactions(
+      new Date(from || '1970-01-01'),
+      new Date(to || '2100-01-01'),
+    );
+  }
+
   @Get('operation-log')
   operationLog(
     @Query('from') from?: string,

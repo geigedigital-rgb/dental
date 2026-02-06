@@ -42,7 +42,7 @@ function classNames(...classes: (string | boolean)[]) {
 export function ReportsPage() {
   const [from, setFrom] = useState(defaultFrom());
   const [to, setTo] = useState(defaultTo());
-  const [cashflowGroupBy, setCashflowGroupBy] = useState<'day' | 'week' | 'month'>('day');
+  const [cashflowYear, setCashflowYear] = useState(() => new Date().getFullYear());
 
   const [profit, setProfit] = useState<any>(null);
   const [consumption, setConsumption] = useState<any[]>([]);
@@ -52,6 +52,8 @@ export function ReportsPage() {
   const [margin, setMargin] = useState<any>(null);
   const [cashflow, setCashflow] = useState<any>(null);
   const [pl, setPl] = useState<any>(null);
+  const [plYear, setPlYear] = useState(() => new Date().getFullYear());
+  const [plLoading, setPlLoading] = useState(false);
   const [revenueMarginDaily, setRevenueMarginDaily] = useState<any[]>([]);
   const [warehouseDashboard, setWarehouseDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -66,18 +68,16 @@ export function ReportsPage() {
       reportsApi.inventoryBalance(),
       reportsApi.lowStockAlerts(),
       reportsApi.marginAnalysis(from, to),
-      reportsApi.pl(from, to),
       reportsApi.revenueMarginDaily(from, to),
       reportsApi.warehouseDashboard(),
     ])
-      .then(([p, c, sp, inv, a, m, plData, rmd, wd]) => {
+      .then(([p, c, sp, inv, a, m, rmd, wd]) => {
         setProfit(p);
         setConsumption(c);
         setServiceProfit(sp);
         setInventory(inv);
         setAlerts(a);
         setMargin(m);
-        setPl(plData);
         setRevenueMarginDaily(rmd);
         setWarehouseDashboard(wd);
       })
@@ -85,9 +85,20 @@ export function ReportsPage() {
   }, [from, to]);
 
   useEffect(() => {
+    setPlLoading(true);
+    reportsApi
+      .pl(`${plYear}-01-01`, `${plYear}-12-31`)
+      .then(setPl)
+      .finally(() => setPlLoading(false));
+  }, [plYear]);
+
+  useEffect(() => {
     setCashflowLoading(true);
-    reportsApi.cashflow(from, to, cashflowGroupBy).then(setCashflow).finally(() => setCashflowLoading(false));
-  }, [from, to, cashflowGroupBy]);
+    reportsApi
+      .cashflow(`${cashflowYear}-01-01`, `${cashflowYear}-12-31`, 'month')
+      .then(setCashflow)
+      .finally(() => setCashflowLoading(false));
+  }, [cashflowYear]);
 
   if (loading) {
     return (
@@ -245,125 +256,222 @@ export function ReportsPage() {
             )}
           </Tab.Panel>
 
-          {/* Денежный поток */}
+          {/* Денежный поток / Учёт финансов по месяцам */}
           <Tab.Panel className="space-y-6" unmount={false}>
             <div
               role="group"
-              aria-label="Группировка данных денежного потока"
-              className="flex flex-wrap items-center gap-3"
+              aria-label="Год для учёта финансов"
+              className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50/80 px-4 py-2"
             >
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Группировка</span>
-              <div
-                role="radiogroup"
-                aria-label="Выбор интервала"
-                className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5"
+              <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Год</span>
+              <select
+                value={cashflowYear}
+                onChange={(e) => setCashflowYear(Number(e.target.value))}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#3882EC] focus:outline-none focus:ring-2 focus:ring-[#3882EC]/20"
               >
-                {(['day', 'week', 'month'] as const).map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    role="radio"
-                    aria-checked={cashflowGroupBy === g}
-                    onClick={() => setCashflowGroupBy(g)}
-                    className={classNames(
-                      'rounded-md px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3882EC] focus-visible:ring-offset-1',
-                      cashflowGroupBy === g
-                        ? 'bg-white text-gray-900 border border-gray-200'
-                        : 'text-gray-500 hover:text-gray-900'
-                    )}
-                  >
-                    {g === 'day' ? 'По дням' : g === 'week' ? 'По неделям' : 'По месяцам'}
-                  </button>
+                {[new Date().getFullYear() + 1, new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
                 ))}
-              </div>
+              </select>
             </div>
 
             {cashflowLoading ? (
               <div className="rounded-lg border border-gray-200 bg-gray-50/80 py-6 text-center">
-                <p className="text-sm text-gray-500">Загрузка денежного потока…</p>
+                <p className="text-sm text-gray-500">Загрузка…</p>
               </div>
             ) : cashflow && (
               <>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-lg border border-gray-200 bg-white p-3" role="article">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Поступления</p>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Поступления за год</p>
                     <p className="mt-0.5 text-lg font-semibold tabular-nums text-emerald-600">{formatMoney(cashflow.summary?.totalInflows ?? 0)}</p>
-                    <p className="mt-0.5 text-[11px] text-gray-400">за период</p>
                   </div>
                   <div className="rounded-lg border border-gray-200 bg-white p-3" role="article">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Выплаты</p>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Выплаты за год</p>
                     <p className="mt-0.5 text-lg font-semibold tabular-nums text-red-600">{formatMoney(cashflow.summary?.totalOutflows ?? 0)}</p>
-                    <p className="mt-0.5 text-[11px] text-gray-400">за период</p>
                   </div>
                   <div className="rounded-lg border border-gray-200 bg-white p-3" role="article">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Чистый поток</p>
                     <p className="mt-0.5 text-lg font-semibold tabular-nums text-gray-900">{formatMoney(cashflow.summary?.netCashflow ?? 0)}</p>
-                    <p className="mt-0.5 text-[11px] text-gray-400">поступления − выплаты</p>
                   </div>
                 </div>
 
-                {cashflow.series?.length > 0 && (
-                  <div className="rounded-lg border border-gray-200 bg-white p-4">
-                    <div className="mb-2">
-                      <h3 className="text-sm font-medium text-gray-800">Поступления и выплаты</h3>
-                      <p className="text-[11px] text-gray-400 mt-0.5">в гривнах, по выбранной группировке</p>
-                    </div>
-                    <div className="h-72">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={cashflow.series} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                          <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="#9ca3af" />
-                          <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" tickFormatter={(v) => `${v}`} />
-                          <Tooltip
-                            formatter={(value: number | undefined) => [formatMoney(value ?? 0), '']}
-                            contentStyle={{ fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6 }}
-                          />
-                          <Legend />
-                          <Bar dataKey="inflows" name="Поступления" fill="#22c55e" radius={[2, 2, 0, 0]} />
-                          <Bar dataKey="outflows" name="Выплаты" fill="#ef4444" radius={[2, 2, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
+                <div className="rounded-lg border border-gray-200 bg-white p-4">
+                  <h3 className="text-sm font-medium text-gray-800">Учёт финансов по месяцам</h3>
+                  <p className="text-[11px] text-gray-400 mt-0.5">в гривнах: поступления и выплаты по всем операциям за выбранный год</p>
+                  <div className="mt-3 h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={(() => {
+                          const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+                          const byPeriod = new Map<string, { inflows: number; outflows: number }>();
+                          for (const row of cashflow.series ?? []) {
+                            byPeriod.set(row.period ?? row.label, { inflows: row.inflows ?? 0, outflows: row.outflows ?? 0 });
+                          }
+                          return monthNames.map((monthLabel, i) => {
+                            const key = `${cashflowYear}-${String(i + 1).padStart(2, '0')}`;
+                            const v = byPeriod.get(key) ?? { inflows: 0, outflows: 0 };
+                            return { monthLabel, inflows: v.inflows, outflows: v.outflows };
+                          });
+                        })()}
+                        margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="monthLabel" tick={{ fontSize: 10 }} stroke="#9ca3af" />
+                        <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" tickFormatter={(v) => `${v}`} />
+                        <Tooltip
+                          formatter={(value: number | undefined) => [formatMoney(value ?? 0), '']}
+                          contentStyle={{ fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6 }}
+                        />
+                        <Legend />
+                        <Bar dataKey="inflows" name="Поступления" fill="#22c55e" stackId="stack" radius={[0, 0, 0, 0]} />
+                        <Bar dataKey="outflows" name="Выплаты" fill="#ef4444" stackId="stack" radius={[2, 2, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
-                )}
+                </div>
               </>
             )}
           </Tab.Panel>
 
           {/* P&L */}
           <Tab.Panel className="space-y-6" unmount={false}>
-            {pl && (
-              <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                <div className="border-b border-gray-200 bg-gray-50/80 px-4 py-2">
-                  <h3 className="text-sm font-medium text-gray-900">Отчёт о прибылях и убытках (P&L)</h3>
-                  <p className="text-[11px] text-gray-400 mt-0.5">с {from} по {to}, включительно</p>
+            <div
+              role="group"
+              aria-label="Год для P&L"
+              className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50/80 px-4 py-2"
+            >
+              <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Год P&L</span>
+              <select
+                value={plYear}
+                onChange={(e) => setPlYear(Number(e.target.value))}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#3882EC] focus:outline-none focus:ring-2 focus:ring-[#3882EC]/20"
+              >
+                {[new Date().getFullYear() + 1, new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {(plLoading || pl) && (
+              <>
+                {plLoading && !pl ? (
+                  <p className="text-sm text-gray-500">Загрузка P&L…</p>
+                ) : pl && (
+                <>
+                <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                  <div className="border-b border-gray-200 bg-gray-50/80 px-4 py-2">
+                    <h3 className="text-sm font-medium text-gray-900">Отчёт о прибылях и убытках (P&L)</h3>
+                    <p className="text-[11px] text-gray-400 mt-0.5">Все транзакции: продажи, приходы, списания.</p>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    <div className="flex justify-between items-center px-4 py-2" role="row">
+                      <span className="text-sm text-gray-600">Выручка (продажи услуг)</span>
+                      <span className="text-sm font-medium tabular-nums text-gray-900">{formatMoney(pl.summary.revenue)}</span>
+                    </div>
+                    <div className="flex justify-between items-center px-4 py-2 bg-gray-50/50">
+                      <span className="text-sm text-gray-500">Себестоимость проданного (материалы)</span>
+                      <span className="text-sm font-medium tabular-nums text-gray-700">−{formatMoney(pl.summary.cogs)}</span>
+                    </div>
+                    <div className="flex justify-between items-center px-4 py-2">
+                      <span className="text-sm font-medium text-gray-800">Валовая прибыль</span>
+                      <span className="text-sm font-semibold tabular-nums text-emerald-600">{formatMoney(pl.summary.grossProfit)} ({pl.summary.grossMarginPercent?.toFixed(1)}%)</span>
+                    </div>
+                    <div className="flex justify-between items-center px-4 py-2 bg-gray-50/50">
+                      <span className="text-sm text-gray-500">Закупки (приходы товара)</span>
+                      <span className="text-sm font-medium tabular-nums text-gray-700">−{formatMoney(pl.summary.purchases)}</span>
+                    </div>
+                    <div className="flex justify-between items-center px-4 py-2">
+                      <span className="text-sm text-gray-500">Доставка (по приходам)</span>
+                      <span className="text-sm font-medium tabular-nums text-gray-700">−{formatMoney(pl.summary.delivery)}</span>
+                    </div>
+                    <div className="flex justify-between items-center px-4 py-2 bg-gray-50/50">
+                      <span className="text-sm text-gray-500">Списания (брак, порча, срок)</span>
+                      <span className="text-sm font-medium tabular-nums text-gray-700">−{formatMoney(pl.summary.writeOffs)}</span>
+                    </div>
+                    <div className="flex justify-between items-center px-4 py-2">
+                      <span className="text-sm text-gray-600">Операционные расходы (доставка + списания)</span>
+                      <span className="text-sm font-medium tabular-nums text-gray-700">−{formatMoney(pl.summary.operatingExpenses)}</span>
+                    </div>
+                    <div className="flex justify-between items-center px-4 py-2.5 bg-[#3882EC]/8 border-t border-gray-200">
+                      <span className="text-sm font-semibold text-gray-900">Чистая прибыль</span>
+                      <span className="text-sm font-bold tabular-nums text-[#3882EC]">{formatMoney(pl.summary.netProfit)} ({pl.summary.netMarginPercent?.toFixed(1)}%)</span>
+                    </div>
+                  </div>
+                  <div className="px-4 py-1.5 text-[11px] text-gray-400 border-t border-gray-100 bg-gray-50/80 flex flex-wrap gap-x-4 gap-y-0.5">
+                    <span>Продаж: {pl.summary.saleCount}</span>
+                    <span>Приходов: {pl.summary.entryCount}</span>
+                    <span>Списаний: {pl.summary.writeOffCount}</span>
+                  </div>
                 </div>
-                <div className="divide-y divide-gray-100">
-                  <div className="flex justify-between items-center px-4 py-2" role="row">
-                    <span className="text-sm text-gray-600">Выручка</span>
-                    <span className="text-sm font-medium tabular-nums text-gray-900">{formatMoney(pl.revenue)}</span>
+
+                <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                  <div className="border-b border-gray-200 bg-gray-50/80 px-4 py-2">
+                    <h3 className="text-sm font-medium text-gray-900">P&L по месяцам ({pl.year})</h3>
+                    <p className="text-[11px] text-gray-400 mt-0.5">Месяцы по горизонтали, показатели по вертикали</p>
                   </div>
-                  <div className="flex justify-between items-center px-4 py-2 bg-gray-50/50">
-                    <span className="text-sm text-gray-500">Себестоимость (материалы)</span>
-                    <span className="text-sm font-medium tabular-nums text-gray-700">−{formatMoney(pl.cogs)}</span>
-                  </div>
-                  <div className="flex justify-between items-center px-4 py-2">
-                    <span className="text-sm font-medium text-gray-800">Валовая прибыль</span>
-                    <span className="text-sm font-semibold tabular-nums text-emerald-600">{formatMoney(pl.grossProfit)} ({pl.grossMarginPercent?.toFixed(1)}%)</span>
-                  </div>
-                  <div className="flex justify-between items-center px-4 py-2 bg-gray-50/50">
-                    <span className="text-sm text-gray-500">Операционные расходы (доставка)</span>
-                    <span className="text-sm font-medium tabular-nums text-gray-700">−{formatMoney(pl.operatingExpenses)}</span>
-                  </div>
-                  <div className="flex justify-between items-center px-4 py-2.5 bg-[#3882EC]/8 border-t border-gray-200">
-                    <span className="text-sm font-semibold text-gray-900">Чистая прибыль</span>
-                    <span className="text-sm font-bold tabular-nums text-[#3882EC]">{formatMoney(pl.netProfit)} ({pl.netMarginPercent?.toFixed(1)}%)</span>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50/80">
+                          <th className="text-left py-2 px-2 font-semibold text-gray-700 min-w-[140px]">Показатель</th>
+                          {pl.byMonth.map((m: any) => (
+                            <th key={m.month} className="text-right py-2 px-1.5 font-semibold text-gray-700 whitespace-nowrap">{m.monthLabel}</th>
+                          ))}
+                          <th className="text-right py-2 px-2 font-semibold text-gray-700 bg-gray-100">Итого</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        <tr className="hover:bg-gray-50/50">
+                          <td className="py-1.5 px-2 text-gray-600">Выручка</td>
+                          {pl.byMonth.map((m: any) => <td key={m.month} className="py-1.5 px-1.5 text-right tabular-nums">{formatMoney(m.revenue)}</td>)}
+                          <td className="py-1.5 px-2 text-right tabular-nums font-medium bg-gray-50">{formatMoney(pl.summary.revenue)}</td>
+                        </tr>
+                        <tr className="hover:bg-gray-50/50 bg-gray-50/30">
+                          <td className="py-1.5 px-2 text-gray-500">Себестоимость</td>
+                          {pl.byMonth.map((m: any) => <td key={m.month} className="py-1.5 px-1.5 text-right tabular-nums text-gray-600">−{formatMoney(m.cogs)}</td>)}
+                          <td className="py-1.5 px-2 text-right tabular-nums text-gray-600 bg-gray-50">−{formatMoney(pl.summary.cogs)}</td>
+                        </tr>
+                        <tr className="hover:bg-gray-50/50">
+                          <td className="py-1.5 px-2 font-medium text-gray-800">Валовая прибыль</td>
+                          {pl.byMonth.map((m: any) => <td key={m.month} className="py-1.5 px-1.5 text-right tabular-nums text-emerald-600">{formatMoney(m.grossProfit)}</td>)}
+                          <td className="py-1.5 px-2 text-right tabular-nums font-semibold text-emerald-600 bg-gray-50">{formatMoney(pl.summary.grossProfit)}</td>
+                        </tr>
+                        <tr className="hover:bg-gray-50/50 bg-gray-50/30">
+                          <td className="py-1.5 px-2 text-gray-500">Закупки</td>
+                          {pl.byMonth.map((m: any) => <td key={m.month} className="py-1.5 px-1.5 text-right tabular-nums text-gray-600">−{formatMoney(m.purchases)}</td>)}
+                          <td className="py-1.5 px-2 text-right tabular-nums text-gray-600 bg-gray-50">−{formatMoney(pl.summary.purchases)}</td>
+                        </tr>
+                        <tr className="hover:bg-gray-50/50">
+                          <td className="py-1.5 px-2 text-gray-500">Доставка</td>
+                          {pl.byMonth.map((m: any) => <td key={m.month} className="py-1.5 px-1.5 text-right tabular-nums text-gray-500">−{formatMoney(m.delivery)}</td>)}
+                          <td className="py-1.5 px-2 text-right tabular-nums text-gray-500 bg-gray-50">−{formatMoney(pl.summary.delivery)}</td>
+                        </tr>
+                        <tr className="hover:bg-gray-50/50 bg-gray-50/30">
+                          <td className="py-1.5 px-2 text-gray-500">Списания</td>
+                          {pl.byMonth.map((m: any) => <td key={m.month} className="py-1.5 px-1.5 text-right tabular-nums text-gray-500">−{formatMoney(m.writeOffs)}</td>)}
+                          <td className="py-1.5 px-2 text-right tabular-nums text-gray-500 bg-gray-50">−{formatMoney(pl.summary.writeOffs)}</td>
+                        </tr>
+                        <tr className="hover:bg-gray-50/50">
+                          <td className="py-1.5 px-2 text-gray-600">Опер. расходы</td>
+                          {pl.byMonth.map((m: any) => <td key={m.month} className="py-1.5 px-1.5 text-right tabular-nums text-gray-600">−{formatMoney(m.operatingExpenses)}</td>)}
+                          <td className="py-1.5 px-2 text-right tabular-nums text-gray-600 bg-gray-50">−{formatMoney(pl.summary.operatingExpenses)}</td>
+                        </tr>
+                        <tr className="hover:bg-gray-50/50 border-t border-gray-200">
+                          <td className="py-1.5 px-2 font-semibold text-gray-900">Чистая прибыль</td>
+                          {pl.byMonth.map((m: any) => <td key={m.month} className="py-1.5 px-1.5 text-right tabular-nums font-medium text-[#3882EC]">{formatMoney(m.netProfit)}</td>)}
+                          <td className="py-1.5 px-2 text-right tabular-nums font-bold text-[#3882EC] bg-[#3882EC]/5">{formatMoney(pl.summary.netProfit)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-                <div className="px-4 py-1.5 text-[11px] text-gray-400 border-t border-gray-100 bg-gray-50/80">
-                  Продаж за период: {pl.saleCount}
-                </div>
-              </div>
+                </>
+                )}
+              </>
             )}
           </Tab.Panel>
 

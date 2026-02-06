@@ -244,8 +244,13 @@ function StockEntriesPanel() {
 
   const save = async () => {
     const qtyMin = 0.0001;
+    const hasEmptyPrice = form.items.some((r) => r.materialId && (r.unitPrice === '' || r.unitPrice.trim() === '' || toNum(r.unitPrice) <= 0));
+    if (hasEmptyPrice) {
+      setError('Укажите цену за единицу для каждой позиции (нельзя оформить приход с пустой или нулевой ценой)');
+      return;
+    }
     const validItems = form.items.filter(
-      (r) => r.materialId && toNum(r.quantity) >= qtyMin && toNum(r.unitPrice) >= 0,
+      (r) => r.materialId && toNum(r.quantity) >= qtyMin && toNum(r.unitPrice) > 0,
     );
     if (!form.supplierId || !validItems.length) {
       setError('Укажите поставщика и хотя бы одну позицию с количеством и ценой');
@@ -545,48 +550,106 @@ function StockEntriesPanel() {
           </Transition.Child>
           <div className="fixed inset-0 flex items-center justify-center p-4">
             <Transition.Child as={Fragment} enter="ease-out duration-200" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100" leave="ease-in duration-150" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95">
-              <Dialog.Panel className="dialog-panel max-w-lg w-full max-h-[90vh] overflow-y-auto">
-                <Dialog.Title className="dialog-title">Детали прихода</Dialog.Title>
+              <Dialog.Panel className="dialog-panel max-w-md w-full max-h-[90vh] overflow-y-auto">
                 {detailLoading ? (
-                  <p className="py-6 text-center text-sm text-gray-500">Загрузка…</p>
+                  <p className="py-8 text-center text-sm text-gray-500">Загрузка…</p>
                 ) : detailEntry ? (
-                  <div className="mt-3 space-y-3">
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div><span className="text-gray-500">Поставщик:</span> {detailEntry.supplier?.name ?? '—'}</div>
-                      <div><span className="text-gray-500">Дата:</span> {new Date(detailEntry.entryDate).toLocaleDateString('ru-RU')}</div>
-                      <div className="col-span-2"><span className="text-gray-500">Позиций:</span> {detailEntry.items?.length ?? 0}</div>
-                    </div>
-                    {detailEntry.items?.length > 0 && (
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 mb-1">Позиции</p>
-                        <ul className="text-xs space-y-0.5">
-                          {detailEntry.items.map((item: any) => (
-                            <li key={item.id}>{item.material?.name ?? item.materialId}: {Number(item.quantity)} × {formatMoney(Number(item.unitPrice))}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    <div>
-                      <label className="label text-xs">Примечание</label>
-                      <input className="input w-full py-1.5 text-sm" value={entryDetailEdit.note} onChange={(e) => setEntryDetailEdit((d) => ({ ...d, note: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label className="label text-xs">Дата прихода</label>
-                      <input type="date" className="input w-full py-1.5 text-sm" value={entryDetailEdit.entryDate} onChange={(e) => setEntryDetailEdit((d) => ({ ...d, entryDate: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label className="label text-xs">Доставка (грн)</label>
-                      <input type="text" inputMode="decimal" className="input w-full py-1.5 text-sm" value={entryDetailEdit.deliveryCost} onChange={(e) => setEntryDetailEdit((d) => ({ ...d, deliveryCost: e.target.value }))} placeholder="0" />
-                    </div>
-                    {entryDetailError && <p className="text-sm text-red-600" role="alert">{entryDetailError}</p>}
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
-                      <button type="button" onClick={saveEntryDetailEdit} className="btn-primary text-sm py-1.5 px-3 inline-flex items-center gap-1"><PencilSquareIcon className="h-4 w-4" /> Сохранить</button>
-                      <button type="button" onClick={openDeleteEntryConfirm} className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100">Удалить</button>
-                      <button type="button" onClick={() => setShowEntryDetailModal(false)} className="btn-secondary text-sm py-1.5 px-3">Закрыть</button>
-                    </div>
-                  </div>
+                  <>
+                    <Dialog.Title className="sr-only">Детали прихода</Dialog.Title>
+                    {(() => {
+                      const itemsTotal = (detailEntry.items ?? []).reduce((s: number, it: any) => s + Number(it.quantity) * Number(it.unitPrice), 0);
+                      const delivery = Number(entryDetailEdit.deliveryCost || (detailEntry.deliveryCost ?? 0)) || 0;
+                      const total = itemsTotal + delivery;
+                      const dateObj = entryDetailEdit.entryDate ? new Date(entryDetailEdit.entryDate + 'T12:00:00') : new Date(detailEntry.entryDate);
+                      const dateStr = dateObj.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+                      return (
+                        <>
+                          <div className="text-center pb-4 border-b border-gray-100">
+                            <p className="text-3xl font-bold tabular-nums text-red-600 tracking-tight">
+                              −{new Intl.NumberFormat('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(total)}
+                            </p>
+                            <p className="text-sm text-gray-500 mt-1 capitalize">{dateStr}</p>
+                          </div>
+
+                          <div className="mt-4">
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Обзор</h4>
+                            <div className="rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden divide-y divide-gray-100">
+                              <div className="flex justify-between items-center px-4 py-3">
+                                <span className="text-sm text-gray-500">Поставщик</span>
+                                <span className="text-sm font-medium text-gray-900">{detailEntry.supplier?.name ?? '—'}</span>
+                              </div>
+                              <div className="flex justify-between items-center px-4 py-3">
+                                <span className="text-sm text-gray-500">Дата</span>
+                                <input
+                                  type="date"
+                                  className="text-sm font-medium text-gray-900 bg-transparent border-0 p-0 focus:ring-0 focus:outline-none"
+                                  value={entryDetailEdit.entryDate}
+                                  onChange={(e) => setEntryDetailEdit((d) => ({ ...d, entryDate: e.target.value }))}
+                                />
+                              </div>
+                              <div className="flex justify-between items-center px-4 py-3">
+                                <span className="text-sm text-gray-500">Тип</span>
+                                <span className="text-sm font-medium text-gray-900">Приход</span>
+                              </div>
+                              <div className="flex justify-between items-center px-4 py-3">
+                                <span className="text-sm text-gray-500">Сумма</span>
+                                <span className="text-sm font-semibold tabular-nums text-gray-900">{formatMoney(total)}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4">
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Детали</h4>
+                            <div className="rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden divide-y divide-gray-100">
+                              <div className="px-4 py-3">
+                                <span className="text-sm text-gray-500 block mb-2">Позиции</span>
+                                <ul className="text-sm space-y-1.5">
+                                  {(detailEntry.items ?? []).map((item: any) => (
+                                    <li key={item.id} className="flex justify-between text-gray-900">
+                                      <span>{item.material?.name ?? item.materialId}</span>
+                                      <span className="tabular-nums">{Number(item.quantity)} × {formatMoney(Number(item.unitPrice))}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div className="flex justify-between items-center px-4 py-3">
+                                <span className="text-sm text-gray-500">Доставка</span>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  className="text-sm font-medium text-gray-900 bg-transparent border-0 p-0 w-24 text-right focus:ring-0 focus:outline-none"
+                                  value={entryDetailEdit.deliveryCost}
+                                  onChange={(e) => setEntryDetailEdit((d) => ({ ...d, deliveryCost: e.target.value }))}
+                                  placeholder="0"
+                                />
+                              </div>
+                              <div className="px-4 py-3">
+                                <span className="text-sm text-gray-500 block mb-1">Примечание</span>
+                                <input
+                                  className="input w-full py-2 text-sm rounded-lg"
+                                  value={entryDetailEdit.note}
+                                  onChange={(e) => setEntryDetailEdit((d) => ({ ...d, note: e.target.value }))}
+                                  placeholder="Введите примечание"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {entryDetailError && <p className="mt-3 text-sm text-red-600" role="alert">{entryDetailError}</p>}
+                          <div className="flex flex-wrap gap-2 pt-4 mt-4 border-t border-gray-200">
+                            <button type="button" onClick={saveEntryDetailEdit} className="btn-primary text-sm py-2 px-4 inline-flex items-center gap-1.5"><PencilSquareIcon className="h-4 w-4" /> Сохранить</button>
+                            <button type="button" onClick={openDeleteEntryConfirm} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100">Удалить</button>
+                            <button type="button" onClick={() => setShowEntryDetailModal(false)} className="btn-secondary text-sm py-2 px-4">Закрыть</button>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </>
                 ) : (
-                  <p className="py-4 text-sm text-gray-500">{entryDetailError || 'Не удалось загрузить данные'}</p>
+                  <>
+                    <Dialog.Title className="dialog-title">Детали прихода</Dialog.Title>
+                    <p className="py-4 text-sm text-gray-500">{entryDetailError || 'Не удалось загрузить данные'}</p>
+                  </>
                 )}
               </Dialog.Panel>
             </Transition.Child>
@@ -603,7 +666,7 @@ function StockEntriesPanel() {
             <Transition.Child as={Fragment} enter="ease-out duration-200" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100" leave="ease-in duration-150" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95">
               <Dialog.Panel className="dialog-panel">
                 <Dialog.Title className="dialog-title">Удалить приход?</Dialog.Title>
-                <p className="mt-2 text-sm text-gray-600">Остатки на складе не изменятся.</p>
+                <p className="mt-2 text-sm text-gray-600">Накладная будет скрыта из списка. Товар и партии остаются на складе, остатки не изменятся.</p>
                 <div className="mt-4 flex justify-end gap-2">
                   <button type="button" onClick={() => setShowDeleteEntryConfirm(false)} className="btn-secondary text-sm py-1.5 px-3">Отмена</button>
                   <button type="button" onClick={() => deleteEntryDetail()} className="inline-flex items-center gap-1 rounded-md border border-transparent bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700">Удалить</button>

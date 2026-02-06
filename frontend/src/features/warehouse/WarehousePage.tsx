@@ -151,13 +151,18 @@ export function WarehousePage() {
       setWoError('Выберите категорию и маркировку (бренд) материала');
       return;
     }
+    const qty = Number(woForm.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setWoError('Укажите количество больше 0');
+      return;
+    }
     setWoError('');
     setWoSaving(true);
     try {
       await stockApi.createWriteOff({
         materialId: woForm.materialId,
         ...(woForm.materialLotId ? { materialLotId: woForm.materialLotId } : {}),
-        quantity: woForm.quantity,
+        quantity: qty,
         reason: woForm.reason,
         writeOffDate: woForm.writeOffDate,
       });
@@ -528,11 +533,20 @@ export function WarehousePage() {
                           <input
                             type="number"
                             inputMode="decimal"
-                            min={0.001}
+                            min={0}
                             step={0.01}
+                            placeholder="0"
                             className="border border-gray-200 rounded px-2 py-1.5 text-sm flex-1 max-w-[120px]"
-                            value={woForm.quantity}
-                            onChange={(e) => setWoForm((f) => ({ ...f, quantity: parseFloat(e.target.value) || 0 }))}
+                            value={woForm.quantity === 0 ? '' : woForm.quantity}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === '') {
+                                setWoForm((f) => ({ ...f, quantity: 0 }));
+                                return;
+                              }
+                              const num = parseFloat(v);
+                              if (!Number.isNaN(num) && num >= 0) setWoForm((f) => ({ ...f, quantity: num }));
+                            }}
                           />
                           <span className="text-sm text-gray-500">{woMaterials.find((mat: any) => mat.id === woForm.materialId)?.unit ?? 'шт'}</span>
                         </span>

@@ -8,6 +8,12 @@ import { UpdateWriteOffDto } from './dto/update-write-off.dto';
 import { AuditService } from '../audit/audit.service';
 import { Decimal } from '@prisma/client/runtime/library';
 
+/** Парсит дату YYYY-MM-DD как календарный день (полдень UTC), чтобы месяц/день не зависели от TZ сервера. */
+function parseDateOnly(s: string): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + 'T12:00:00.000Z');
+  return new Date(s);
+}
+
 @Injectable()
 export class StockService {
   constructor(
@@ -19,7 +25,7 @@ export class StockService {
   async createEntry(dto: CreateStockEntryDto, userId?: string) {
     const entry = await this.movementEngine.registerGoodsReceipt({
       supplierId: dto.supplierId,
-      entryDate: new Date(dto.entryDate),
+      entryDate: parseDateOnly(dto.entryDate),
       note: dto.note,
       deliveryCost: dto.deliveryCost != null ? new Decimal(dto.deliveryCost) : undefined,
       items: dto.items.map((i) => ({
@@ -83,7 +89,7 @@ export class StockService {
     await this.getEntryById(id);
     const data: { note?: string | null; entryDate?: Date; deliveryCost?: Decimal } = {};
     if (dto.note !== undefined) data.note = dto.note || null;
-    if (dto.entryDate !== undefined) data.entryDate = new Date(dto.entryDate);
+    if (dto.entryDate !== undefined) data.entryDate = parseDateOnly(dto.entryDate);
     if (dto.deliveryCost !== undefined) data.deliveryCost = new Decimal(dto.deliveryCost);
     const updated = await this.prisma.stockEntry.update({
       where: { id },
@@ -104,6 +110,10 @@ export class StockService {
     return updated;
   }
 
+  /**
+   * Мягкое удаление прихода: накладная и строки скрываются из списка.
+   * Движения (IN) и партии (MaterialLot) не трогаем — товар остаётся на складе, остатки не изменяются.
+   */
   async deleteEntry(id: string, userId?: string) {
     const entry = await this.getEntryById(id);
     const e = entry as any;

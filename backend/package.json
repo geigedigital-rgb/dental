@@ -13,7 +13,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "script:clear-excess-balance": "ts-node scripts/clear-excess-balance.ts"
+    "script:clear-excess-balance": "ts-node scripts/clear-excess-balance.ts",
+    "script:clear-transactional-data": "ts-node scripts/clear-transactional-data.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

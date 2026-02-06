@@ -114,6 +114,9 @@ export const reportsApi = {
     api.get('/reports/pl', { params: { from, to } }).then((r) => r.data),
   revenueMarginDaily: (from: string, to: string) =>
     api.get('/reports/revenue-margin-daily', { params: { from, to } }).then((r) => r.data),
+  /** Единый список всех транзакций за период (продажи, приходы, списания) из живых таблиц */
+  unifiedTransactions: (from: string, to: string) =>
+    api.get('/reports/transactions', { params: { from, to } }).then((r) => r.data),
   operationLog: (params?: { from?: string; to?: string; limit?: number; entityType?: string; entityId?: string }) =>
     api.get('/reports/operation-log', { params }).then((r) => r.data),
 };
