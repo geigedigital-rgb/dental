@@ -156,7 +156,8 @@ export function ReportsPage() {
       {dateFilter}
 
       <Tab.Group as="div" className="space-y-4">
-        <Tab.List className="flex flex-wrap gap-1.5" as="div">
+        <div role="tablist" aria-label="Вкладки отчётов" className="flex flex-wrap gap-1.5">
+        <Tab.List className="contents">
           {tabs.map((tab) => (
             <Tab
               key={tab.name}
@@ -174,6 +175,7 @@ export function ReportsPage() {
             </Tab>
           ))}
         </Tab.List>
+        </div>
 
         <Tab.Panels className="mt-4">
           {/* Обзор */}
@@ -215,7 +217,7 @@ export function ReportsPage() {
                       <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#9ca3af" />
                       <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" tickFormatter={(v) => `${v}`} />
                       <Tooltip
-                        formatter={(value: number | undefined) => [formatMoney(value ?? 0), '']}
+                        formatter={(value: unknown) => [formatMoney(Number(value ?? 0)), '']}
                         labelFormatter={(label) => `Дата: ${label}`}
                         contentStyle={{ fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6 }}
                       />
@@ -246,9 +248,9 @@ export function ReportsPage() {
                         paddingAngle={1}
                         dataKey="value"
                         nameKey="name"
-                        label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                        label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`}
                       />
-                      <Tooltip formatter={(value: number | undefined) => formatMoney(value ?? 0)} />
+                      <Tooltip formatter={(value: unknown) => formatMoney(Number(value ?? 0))} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -322,7 +324,7 @@ export function ReportsPage() {
                         <XAxis dataKey="monthLabel" tick={{ fontSize: 10 }} stroke="#9ca3af" />
                         <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" tickFormatter={(v) => `${v}`} />
                         <Tooltip
-                          formatter={(value: number | undefined) => [formatMoney(value ?? 0), '']}
+                          formatter={(value: unknown) => [formatMoney(Number(value ?? 0)), '']}
                           contentStyle={{ fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6 }}
                         />
                         <Legend />
@@ -489,7 +491,7 @@ export function ReportsPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}`} />
                       <YAxis type="category" dataKey="serviceName" tick={{ fontSize: 11 }} width={75} />
-                      <Tooltip formatter={(value: number | undefined) => formatMoney(value ?? 0)} />
+                      <Tooltip formatter={(value: unknown) => formatMoney(Number(value ?? 0))} />
                       <Bar dataKey="totalRevenue" name="Выручка" fill="#3882EC" radius={[0, 2, 2, 0]} />
                       <Bar dataKey="totalMargin" name="Маржа" fill="#22c55e" radius={[0, 2, 2, 0]} />
                     </BarChart>

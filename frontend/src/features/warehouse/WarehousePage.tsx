@@ -90,7 +90,7 @@ export function WarehousePage() {
       if (writeOffPreset) {
         const mat = (m || []).find((x: any) => x.id === writeOffPreset.materialId);
         const categoryFromMaterial = mat ? ((mat.materialType?.name ?? '').toString().split(' ')[0] || '').trim() : '';
-        const category =
+        const category: string =
           (categoryFromMaterial && cats.includes(categoryFromMaterial))
             ? categoryFromMaterial
             : cats.includes(writeOffPreset.category)
