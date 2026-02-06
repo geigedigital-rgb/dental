@@ -104,9 +104,10 @@ export function WarehousePage() {
           materialLotId: writeOffPreset.materialLotId ?? '',
         }));
       } else {
+        const firstCategory = typeof cats[0] === 'string' ? cats[0] : '';
         setWoForm((f) => ({
           ...f,
-          category: cats[0] ?? '',
+          category: firstCategory ?? '',
           materialId: '',
           materialLotId: '',
           quantity: 1,
