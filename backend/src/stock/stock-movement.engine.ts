@@ -83,10 +83,11 @@ export class StockMovementEngine {
   }
 
   /**
-   * Ручное списание: проверка остатка; при FIFO — списание по партиям (FEFO/FIFO), иначе по средней.
+   * Ручное списание: проверка остатка. Если передан materialLotId — списание только с этой партии; иначе по FIFO или по средней.
    */
   async registerWriteOff(params: {
     materialId: string;
+    materialLotId?: string;
     quantity: Decimal;
     reason: string;
     writeOffDate: Date;
@@ -96,10 +97,63 @@ export class StockMovementEngine {
       where: { id: params.materialId, deletedAt: null },
     });
     if (!material) throw new BadRequestException('Материал не найден');
+    const qty = Number(params.quantity);
+
+    if (params.materialLotId) {
+      const lot = await this.prisma.materialLot.findFirst({
+        where: { id: params.materialLotId, materialId: params.materialId, quantity: { gt: 0 } },
+      });
+      if (!lot) {
+        throw new BadRequestException('Партия не найдена или в ней нет остатка');
+      }
+      const lotQty = Number(lot.quantity);
+      if (lotQty < qty) {
+        throw new BadRequestException(
+          `Недостаточно в выбранной партии. В партии: ${lotQty}, запрошено: ${qty}`,
+        );
+      }
+      return this.prisma.$transaction(async (tx) => {
+        const newLotQty = lotQty - qty;
+        if (newLotQty <= 0) {
+          await tx.materialLot.delete({ where: { id: lot.id } });
+        } else {
+          await tx.materialLot.update({
+            where: { id: lot.id },
+            data: { quantity: new Decimal(newLotQty) },
+          });
+        }
+        const writeOff = await tx.writeOff.create({
+          data: {
+            materialId: params.materialId,
+            materialLotId: params.materialLotId,
+            quantity: params.quantity,
+            reason: params.reason,
+            writeOffDate: params.writeOffDate,
+            createdById: params.createdById ?? null,
+          },
+        });
+        await this.recordMovementAndUpdateWac(tx, {
+          materialId: params.materialId,
+          type: StockMovementType.OUT,
+          quantity: params.quantity,
+          unitCost: lot.unitCost,
+          sourceType: StockMovementSourceType.WRITE_OFF,
+          sourceId: writeOff.id,
+          writeOffId: writeOff.id,
+          movementDate: params.writeOffDate,
+          note: params.reason,
+        });
+        return tx.writeOff.findUnique({
+          where: { id: writeOff.id },
+          include: { material: true, materialLot: true },
+        });
+      });
+    }
+
     const balance = await this.getBalanceForMaterial(this.prisma, params.materialId);
-    if (balance < Number(params.quantity)) {
+    if (balance < qty) {
       throw new BadRequestException(
-        `Недостаточно остатка. Доступно: ${balance}, запрошено: ${params.quantity}`,
+        `Недостаточно остатка. Доступно: ${balance}, запрошено: ${qty}`,
       );
     }
     const inv = await this.settings.getInventorySettings();
@@ -108,7 +162,7 @@ export class StockMovementEngine {
     return this.prisma.$transaction(async (tx) => {
       let unitCost: Decimal;
       if (useFifo) {
-        const cost = await this.consumeFromLots(tx, params.materialId, Number(params.quantity));
+        const cost = await this.consumeFromLots(tx, params.materialId, qty);
         unitCost = new Decimal(cost);
       } else {
         unitCost = (material.averageCost ?? new Decimal(0)) as Decimal;

@@ -133,6 +133,7 @@ export class StockService {
   async createWriteOff(dto: CreateWriteOffDto, userId?: string) {
     const writeOff = await this.movementEngine.registerWriteOff({
       materialId: dto.materialId,
+      materialLotId: dto.materialLotId,
       quantity: new Decimal(dto.quantity),
       reason: dto.reason,
       writeOffDate: new Date(dto.writeOffDate),
@@ -161,7 +162,7 @@ export class StockService {
   async getWriteOffById(id: string) {
     const w = await this.prisma.writeOff.findFirst({
       where: { id, deletedAt: null },
-      include: { material: true },
+      include: { material: true, materialLot: true },
     });
     if (!w) throw new NotFoundException('Списание не найдено');
     return w;
@@ -247,7 +248,100 @@ export class StockService {
       where,
       orderBy: { movementDate: 'desc' },
       take: params.limit ?? 100,
-      include: { material: true },
+      include: {
+        material: true,
+        stockEntry: { include: { supplier: true } },
+      },
     });
+  }
+
+  /**
+   * Партии одного материала (для выбора при ручном списании).
+   */
+  async getLotsByMaterial(materialId: string) {
+    const lots = await this.prisma.materialLot.findMany({
+      where: { materialId, quantity: { gt: 0 } },
+      orderBy: [{ receivedAt: 'desc' }],
+      include: {
+        stockEntryItem: {
+          include: {
+            stockEntry: { include: { supplier: true } },
+          },
+        },
+      },
+    });
+    return lots.map((lot) => ({
+      id: lot.id,
+      quantity: Number(lot.quantity),
+      unitCost: Number(lot.unitCost),
+      receivedAt: lot.receivedAt,
+      expiryDate: lot.expiryDate,
+      supplierName: (lot.stockEntryItem as any)?.stockEntry?.supplier?.name ?? '—',
+    }));
+  }
+
+  /**
+   * Остатки по материалам с разбивкой по партиям: поставщик, кол-во, дата прихода, срок годности.
+   * Для одного таба «Цепочка» на фронте.
+   */
+  async getInventoryWithLots() {
+    const materials = await this.prisma.material.findMany({
+      where: { deletedAt: null, isArchived: false },
+      include: { materialType: true },
+    });
+    const movementSums = await this.prisma.stockMovement.groupBy({
+      by: ['materialId', 'type'],
+      where: { deletedAt: null },
+      _sum: { quantity: true },
+    });
+    const balanceByMaterial = new Map<string, number>();
+    for (const row of movementSums) {
+      const current = balanceByMaterial.get(row.materialId) ?? 0;
+      const q = Number(row._sum.quantity ?? 0);
+      balanceByMaterial.set(row.materialId, row.type === 'IN' ? current + q : current - q);
+    }
+
+    const lots = await this.prisma.materialLot.findMany({
+      where: { quantity: { gt: 0 } },
+      include: {
+        stockEntryItem: {
+          include: {
+            stockEntry: { include: { supplier: true } },
+          },
+        },
+      },
+    });
+
+    const lotsByMaterial = new Map<string, any[]>();
+    for (const lot of lots) {
+      const supplierName = (lot.stockEntryItem as any)?.stockEntry?.supplier?.name ?? '—';
+      const list = lotsByMaterial.get(lot.materialId) ?? [];
+      list.push({
+        id: lot.id,
+        quantity: Number(lot.quantity),
+        unitCost: Number(lot.unitCost),
+        receivedAt: lot.receivedAt,
+        expiryDate: lot.expiryDate,
+        supplierName,
+      });
+      lotsByMaterial.set(lot.materialId, list);
+    }
+
+    return materials
+      .map((m) => {
+        const balance = balanceByMaterial.get(m.id) ?? 0;
+        const materialLots = lotsByMaterial.get(m.id) ?? [];
+        return {
+          id: m.id,
+          name: m.name,
+          unit: m.unit ?? 'шт',
+          category: (m.materialType?.name ?? '').split(' ')[0] || '—',
+          currentQuantity: balance,
+          averageCost: Number(m.averageCost ?? 0),
+          minStockThreshold: Number(m.minStockThreshold ?? 0),
+          lots: materialLots.sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()),
+        };
+      })
+      .filter((m) => m.currentQuantity > 0);
   }
 }

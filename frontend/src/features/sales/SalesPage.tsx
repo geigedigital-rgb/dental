@@ -1,4 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Tab, Dialog, Transition } from '@headlessui/react';
 import { ArrowDownTrayIcon, ArrowUpTrayIcon, ShoppingCartIcon, ArrowLeftIcon, TrashIcon, CheckIcon, PencilSquareIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { stockApi, salesApi, suppliersApi, materialsApi, materialTypesApi, servicesApi, reportsApi, settingsApi } from '../../shared/api/client';
@@ -12,7 +13,19 @@ function classNames(...classes: string[]) {
 }
 
 export function SalesPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [tabIndex, setTabIndex] = useState(0);
+  const [writeOffPreset, setWriteOffPreset] = useState<{ materialId: string; materialName: string; category: string } | null>(null);
+
+  useEffect(() => {
+    const preset = (location.state as any)?.writeOffPreset;
+    if (preset?.materialId) {
+      setTabIndex(1);
+      setWriteOffPreset(preset);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state]);
 
   return (
     <div className="space-y-3">
@@ -55,7 +68,7 @@ export function SalesPage() {
         </Tab.List>
         <Tab.Panels className="mt-2 focus:outline-none">
           <Tab.Panel><StockEntriesPanel /></Tab.Panel>
-          <Tab.Panel><WriteOffsPanel /></Tab.Panel>
+          <Tab.Panel><WriteOffsPanel writeOffPreset={writeOffPreset} onConsumePreset={() => setWriteOffPreset(null)} /></Tab.Panel>
           <Tab.Panel><ServiceSalesPanel /></Tab.Panel>
         </Tab.Panels>
       </Tab.Group>
@@ -336,7 +349,14 @@ function StockEntriesPanel() {
                       <th className="text-left py-1.5 px-2 font-semibold text-gray-700">Маркировка (Бренд)</th>
                       <th className="text-right py-1.5 px-2 font-semibold text-gray-700 w-24">Кол-во (ед. закупки)</th>
                       <th className="text-right py-1.5 px-2 font-semibold text-gray-700 w-28">Цена за ед. закупки (грн)</th>
-                      {showExpiry && <th className="text-left py-1.5 px-2 font-semibold text-gray-700 w-28">Срок годности</th>}
+                      {showExpiry && (
+                              <th
+                                className="text-left py-1.5 px-2 font-semibold text-gray-700 w-28"
+                                title="Оставьте пустым, если у материала нет срока годности. Указывается для партии при учёте по FEFO."
+                              >
+                                Срок годности
+                              </th>
+                            )}
                       <th className="w-6" />
                     </tr>
                   </thead>
@@ -414,7 +434,7 @@ function StockEntriesPanel() {
                                 value={row.expiryDate}
                                 onChange={(e) => updateItem(i, 'expiryDate', e.target.value)}
                                 aria-label="Срок годности"
-                                title="Срок годности партии (для FEFO)"
+                                title="Оставьте пустым, если срока годности нет"
                               />
                             </td>
                           )}
@@ -592,13 +612,19 @@ function StockEntriesPanel() {
   );
 }
 
-function WriteOffsPanel() {
+function WriteOffsPanel({
+  writeOffPreset = null,
+  onConsumePreset = () => {},
+}: {
+  writeOffPreset?: { materialId: string; materialName: string; category: string; materialLotId?: string } | null;
+  onConsumePreset?: () => void;
+} = {}) {
   const [list, setList] = useState<any[]>([]);
   const [types, setTypes] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ category: '', materialId: '', quantity: 1, reason: '', writeOffDate: new Date().toISOString().slice(0, 10) });
+  const [form, setForm] = useState({ category: '', materialId: '', materialLotId: '', quantity: 1, reason: '', writeOffDate: new Date().toISOString().slice(0, 10) });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [detailWriteOff, setDetailWriteOff] = useState<any | null>(null);
@@ -609,6 +635,8 @@ function WriteOffsPanel() {
   const [woHistoryLogs, setWoHistoryLogs] = useState<any[]>([]);
   const [woHistoryLoading, setWoHistoryLoading] = useState(false);
   const [showDeleteWriteOffConfirm, setShowDeleteWriteOffConfirm] = useState(false);
+  const [lots, setLots] = useState<any[]>([]);
+  const [lotsLoading, setLotsLoading] = useState(false);
 
   const writeOffCategories = [...new Set((types || []).map((t: any) => (t?.name ?? '').toString().split(' ')[0]).filter(Boolean))].sort();
   const getMaterialsInCategoryWriteOff = (category: string) => {
@@ -625,6 +653,29 @@ function WriteOffsPanel() {
     }).finally(() => setLoading(false));
   };
   useEffect(() => load(), []);
+
+  useEffect(() => {
+    if (writeOffPreset?.materialId && materials.length > 0 && types.length > 0) {
+      const category = writeOffCategories.includes(writeOffPreset.category) ? writeOffPreset.category : writeOffCategories[0] ?? '';
+      setForm((f) => ({
+        ...f,
+        category,
+        materialId: writeOffPreset.materialId,
+        materialLotId: writeOffPreset.materialLotId ?? '',
+      }));
+      setShowForm(true);
+      onConsumePreset?.();
+    }
+  }, [writeOffPreset?.materialId, writeOffPreset?.category, writeOffPreset?.materialLotId, materials.length, types.length]);
+
+  useEffect(() => {
+    if (!form.materialId) {
+      setLots([]);
+      return;
+    }
+    setLotsLoading(true);
+    stockApi.getLotsByMaterial(form.materialId).then(setLots).catch(() => setLots([])).finally(() => setLotsLoading(false));
+  }, [form.materialId]);
 
   const loadWoHistory = () => {
     setWoHistoryLoading(true);
@@ -688,6 +739,7 @@ function WriteOffsPanel() {
     setForm({
       category: writeOffCategories[0] ?? '',
       materialId: '',
+      materialLotId: '',
       quantity: 1,
       reason: '',
       writeOffDate: new Date().toISOString().slice(0, 10),
@@ -695,6 +747,15 @@ function WriteOffsPanel() {
     setError('');
     setShowForm(true);
   };
+
+  const formatLotOption = (lot: any) => {
+    const exp = lot.expiryDate ? new Date(lot.expiryDate).toLocaleDateString('ru-RU') : '—';
+    return `${lot.supplierName}, остаток ${Number(lot.quantity).toLocaleString('ru-RU')}, срок ${exp}`;
+  };
+  const lotOptions = [
+    { id: '', name: 'Не указывать (по FIFO / средней)' },
+    ...lots.map((l: any) => ({ id: l.id, name: formatLotOption(l) })),
+  ];
 
   const save = async () => {
     if (!form.materialId) {
@@ -706,6 +767,7 @@ function WriteOffsPanel() {
     try {
       await stockApi.createWriteOff({
         materialId: form.materialId,
+        ...(form.materialLotId ? { materialLotId: form.materialLotId } : {}),
         quantity: form.quantity,
         reason: form.reason,
         writeOffDate: form.writeOffDate,
@@ -742,9 +804,22 @@ function WriteOffsPanel() {
                   label="Маркировка (Бренд)"
                   value={form.materialId}
                   options={materialOptionsWriteOff}
-                  onChange={(id) => setForm((f) => ({ ...f, materialId: id }))}
+                  onChange={(id) => setForm((f) => ({ ...f, materialId: id, materialLotId: '' }))}
                   placeholder="Конкретный материал"
                 />
+                {form.materialId && (
+                  <div>
+                    <label className="label">Партия (поставщик)</label>
+                    <ListboxSelect
+                      value={form.materialLotId}
+                      options={lotOptions}
+                      onChange={(id) => setForm((f) => ({ ...f, materialLotId: id }))}
+                      placeholder={lotsLoading ? 'Загрузка…' : 'Выберите партию или оставьте по FIFO/средней'}
+                      buttonClassName="py-1.5 text-xs border border-gray-200 rounded"
+                    />
+                    <p className="text-[11px] text-gray-500 mt-0.5">Укажите партию, чтобы списать именно с неё; иначе списание по настройкам склада.</p>
+                  </div>
+                )}
                 <div>
                   <label className="label">Количество</label>
                   <span className="flex items-center gap-2">

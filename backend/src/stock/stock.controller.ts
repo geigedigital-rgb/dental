@@ -97,6 +97,16 @@ export class StockController {
     return this.stockService.deleteWriteOff(id, req.user?.id);
   }
 
+  @Get('inventory-with-lots')
+  getInventoryWithLots() {
+    return this.stockService.getInventoryWithLots();
+  }
+
+  @Get('materials/:materialId/lots')
+  getLotsByMaterial(@Param('materialId', ParseUUIDPipe) materialId: string) {
+    return this.stockService.getLotsByMaterial(materialId);
+  }
+
   @Get('movements')
   getMovements(
     @Query('materialId') materialId?: string,

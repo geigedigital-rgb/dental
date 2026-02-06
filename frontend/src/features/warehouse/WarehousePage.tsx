@@ -1,16 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import { Tab } from '@headlessui/react';
 import {
-  CubeIcon,
   ArrowRightOnRectangleIcon,
   ArrowLeftOnRectangleIcon,
   LinkIcon,
   MagnifyingGlassIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ArrowUpTrayIcon,
 } from '@heroicons/react/24/outline';
-import { materialsApi, materialTypesApi, stockApi } from '../../shared/api/client';
+import { useNavigate } from 'react-router-dom';
+import { stockApi } from '../../shared/api/client';
 import { formatMoney } from '../../shared/format';
 import { PageHeader } from '../../shared/PageHeader';
-import { ListboxSelect } from '../../shared/ListboxSelect';
 
 function classNames(...classes: (string | boolean)[]) {
   return classes.filter(Boolean).join(' ');
@@ -23,12 +25,11 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 
 export function WarehousePage() {
-  const [types, setTypes] = useState<any[]>([]);
-  const [inventory, setInventory] = useState<any[]>([]);
+  const [inventoryWithLots, setInventoryWithLots] = useState<any[]>([]);
   const [movements, setMovements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [search, setSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [movementsFrom, setMovementsFrom] = useState(() => {
     const d = new Date();
@@ -36,79 +37,54 @@ export function WarehousePage() {
     return d.toISOString().slice(0, 10);
   });
   const [movementsTo, setMovementsTo] = useState(() => new Date().toISOString().slice(0, 10));
-  const [chainMaterialId, setChainMaterialId] = useState<string>('');
-  const [chainMovements, setChainMovements] = useState<any[]>([]);
 
-  const loadBase = () => {
+  const [expandedMaterialId, setExpandedMaterialId] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  const loadInventory = () => {
     setLoading(true);
-    Promise.all([
-      materialTypesApi.list(),
-      materialsApi.list(),
-    ])
-      .then(([t, mats]) => {
-        setTypes(t || []);
-        setInventory(mats || []);
-      })
-      .finally(() => setLoading(false));
+    stockApi.getInventoryWithLots().then(setInventoryWithLots).finally(() => setLoading(false));
   };
 
-  useEffect(() => loadBase(), []);
+  useEffect(() => loadInventory(), []);
 
   const loadMovements = () => {
-    stockApi.getMovements({
-      from: movementsFrom,
-      to: movementsTo,
-      limit: 500,
-    }).then(setMovements);
+    stockApi
+      .getMovements({ from: movementsFrom, to: movementsTo, limit: 500 })
+      .then(setMovements);
   };
 
   useEffect(() => {
     if (movementsFrom && movementsTo) loadMovements();
   }, [movementsFrom, movementsTo]);
 
-  const loadChain = () => {
-    if (!chainMaterialId) {
-      setChainMovements([]);
-      return;
-    }
-    stockApi.getMovements({
-      materialId: chainMaterialId,
-      limit: 200,
-    }).then(setChainMovements);
+  const toggleExpand = (materialId: string) => {
+    setExpandedMaterialId((prev) => (prev === materialId ? null : materialId));
   };
 
-  useEffect(() => {
-    loadChain();
-  }, [chainMaterialId]);
-
-  const categories = [...new Set((types || []).map((t: any) => t.name.split(' ')[0]).filter(Boolean))].sort();
+  const categories = [...new Set((inventoryWithLots || []).map((m: any) => m.category).filter(Boolean))].sort();
   const categoryCounts: Record<string, number> = {};
-  (inventory || []).forEach((m: any) => {
-    const typeName = m.materialType?.name ?? '';
-    const cat = typeName.split(' ')[0] || 'Прочее';
+  (inventoryWithLots || []).forEach((m: any) => {
+    const cat = m.category || 'Прочее';
     categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
   });
-  const filteredInventory = (inventory || []).filter((m: any) => {
-    const cat = (m.materialType?.name ?? '').split(' ')[0] || '';
-    if (selectedCategory && cat !== selectedCategory) return false;
+
+  const filteredInventory = (inventoryWithLots || []).filter((m: any) => {
+    if (selectedCategory && m.category !== selectedCategory) return false;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      if (!m.name?.toLowerCase().includes(q) && !cat.toLowerCase().includes(q)) return false;
+      if (!m.name?.toLowerCase().includes(q) && !(m.category ?? '').toLowerCase().includes(q)) return false;
     }
     if (lowStockOnly) {
-      const qty = Number(m.currentQuantity ?? 0);
       const min = Number(m.minStockThreshold ?? 0);
-      if (min <= 0 || qty >= min) return false;
+      if (min <= 0 || m.currentQuantity >= min) return false;
     }
     return true;
   });
 
-  const materialOptions = (inventory || []).map((m: any) => ({
-    id: m.id,
-    name: `${m.name} (${m.unit})`,
-  }));
+  const formatDate = (d: string | Date) => (d ? new Date(d).toLocaleDateString('ru-RU') : '—');
 
-  if (loading) {
+  if (loading && inventoryWithLots.length === 0) {
     return (
       <>
         <PageHeader title="Склад" breadcrumbs={[{ label: 'Главная', to: '/dashboard' }, { label: 'Склад' }]} />
@@ -124,7 +100,6 @@ export function WarehousePage() {
         breadcrumbs={[{ label: 'Главная', to: '/dashboard' }, { label: 'Склад' }]}
       />
 
-      {/* Карточки категорий */}
       <section>
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Категории</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
@@ -132,14 +107,12 @@ export function WarehousePage() {
             type="button"
             onClick={() => setSelectedCategory('')}
             className={classNames(
-              'rounded-xl border-2 p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2',
-              !selectedCategory
-                ? 'border-gray-300 bg-white shadow-sm'
-                : 'border-gray-100 bg-gray-50/50 hover:border-gray-200 hover:bg-white'
+              'rounded-lg border-2 p-3 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300',
+              !selectedCategory ? 'border-gray-300 bg-white' : 'border-gray-100 bg-gray-50/50 hover:border-gray-200'
             )}
           >
             <span className="block text-sm font-semibold text-gray-900">Все</span>
-            <span className="block mt-0.5 text-xs text-gray-500">{inventory?.length ?? 0} позиций</span>
+            <span className="block mt-0.5 text-xs text-gray-500">{inventoryWithLots?.length ?? 0} позиций</span>
           </button>
           {categories.map((cat) => (
             <button
@@ -147,20 +120,17 @@ export function WarehousePage() {
               type="button"
               onClick={() => setSelectedCategory(cat)}
               className={classNames(
-                'rounded-xl border-2 p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2',
-                selectedCategory === cat
-                  ? 'border-gray-300 bg-white shadow-sm'
-                  : 'border-gray-100 bg-gray-50/50 hover:border-gray-200 hover:bg-white'
+                'rounded-lg border-2 p-3 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300',
+                selectedCategory === cat ? 'border-gray-300 bg-white' : 'border-gray-100 bg-gray-50/50 hover:border-gray-200'
               )}
             >
               <span className="block text-sm font-semibold text-gray-900">{cat}</span>
-              <span className="block mt-0.5 text-xs text-gray-500">{categoryCounts[cat] ?? 0} позиций</span>
+              <span className="block mt-0.5 text-xs text-gray-500">{categoryCounts[cat] ?? 0} поз.</span>
             </button>
           ))}
         </div>
       </section>
 
-      {/* Табы */}
       <Tab.Group>
         <Tab.List className="flex gap-0.5 rounded-lg border border-gray-100 bg-white p-0.5 max-w-md">
           <Tab
@@ -171,8 +141,8 @@ export function WarehousePage() {
               )
             }
           >
-            <CubeIcon className="h-4 w-4" />
-            Остатки
+            <LinkIcon className="h-4 w-4" />
+            Склад материалов
           </Tab>
           <Tab
             className={({ selected }) =>
@@ -185,22 +155,11 @@ export function WarehousePage() {
             <ArrowRightOnRectangleIcon className="h-4 w-4" />
             Движения
           </Tab>
-          <Tab
-            className={({ selected }) =>
-              classNames(
-                'flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2',
-                selected ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-              )
-            }
-          >
-            <LinkIcon className="h-4 w-4" />
-            Цепочка
-          </Tab>
         </Tab.List>
 
         <Tab.Panels className="mt-3">
-          {/* Остатки */}
-          <Tab.Panel className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+          {/* Цепочка: остатки + партии + движения в одном табе с раскрывающимися строками */}
+          <Tab.Panel className="rounded-lg border border-gray-200 bg-white overflow-hidden">
             <div className="p-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[160px] max-w-xs">
                 <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -226,9 +185,10 @@ export function WarehousePage() {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/80">
+                    <th className="w-8 py-2.5 px-2 text-left" aria-label="Развернуть" />
                     <th className="text-left py-2.5 px-3 font-semibold text-gray-700">Категория</th>
                     <th className="text-left py-2.5 px-3 font-semibold text-gray-700">Маркировка (Бренд)</th>
-                    <th className="text-left py-2.5 px-3 font-semibold text-gray-700">Ед. учета</th>
+                    <th className="text-left py-2.5 px-3 font-semibold text-gray-700">Ед.</th>
                     <th className="text-right py-2.5 px-3 font-semibold text-gray-700">Остаток</th>
                     <th className="text-right py-2.5 px-3 font-semibold text-gray-700">Ср. себестоимость</th>
                   </tr>
@@ -236,19 +196,100 @@ export function WarehousePage() {
                 <tbody className="divide-y divide-gray-100">
                   {filteredInventory.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-gray-500 text-sm">
-                        Нет позиций по выбранным фильтрам
+                      <td colSpan={6} className="py-8 text-center text-gray-500 text-sm">
+                        Нет позиций на складе по выбранным фильтрам
                       </td>
                     </tr>
                   ) : (
                     filteredInventory.map((m: any) => (
-                      <tr key={m.id} className="hover:bg-gray-50/50">
-                        <td className="py-2 px-3 text-gray-600">{(m.materialType?.name ?? '').split(' ')[0] || '—'}</td>
-                        <td className="py-2 px-3 font-medium text-gray-900">{m.name}</td>
-                        <td className="py-2 px-3 text-gray-600">{m.unit}</td>
-                        <td className="py-2 px-3 text-right">{Number(m.currentQuantity ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</td>
-                        <td className="py-2 px-3 text-right">{formatMoney(Number(m.averageCost ?? 0))}</td>
-                      </tr>
+                      <Fragment key={m.id}>
+                        <tr
+                          className={classNames(
+                            'hover:bg-gray-50/50 cursor-pointer',
+                            expandedMaterialId === m.id && 'bg-gray-50'
+                          )}
+                          onClick={() => toggleExpand(m.id)}
+                        >
+                          <td className="py-2 px-2 text-gray-400">
+                            {expandedMaterialId === m.id ? (
+                              <ChevronDownIcon className="h-4 w-4" />
+                            ) : (
+                              <ChevronRightIcon className="h-4 w-4" />
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-gray-600">{m.category}</td>
+                          <td className="py-2 px-3 font-medium text-gray-900">{m.name}</td>
+                          <td className="py-2 px-3 text-gray-600">{m.unit}</td>
+                          <td className="py-2 px-3 text-right tabular-nums">
+                            {Number(m.currentQuantity).toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2 px-3 text-right tabular-nums">{formatMoney(m.averageCost)}</td>
+                        </tr>
+                        {expandedMaterialId === m.id && (
+                          <tr className="bg-gray-50/80">
+                            <td colSpan={6} className="py-3 px-3">
+                              <div className="space-y-4 pl-2 border-l-2 border-gray-200">
+                                {/* Партии: поставщик, кол-во, дата прихода, срок годности */}
+                                {m.lots?.length > 0 ? (
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-600 mb-2">Партии (поставщик, срок годности)</p>
+                                    <table className="min-w-full text-xs border border-gray-200 rounded-lg overflow-hidden bg-white">
+                                      <thead>
+                                        <tr className="bg-gray-50">
+                                          <th className="text-left py-1.5 px-2 font-medium text-gray-500">Поставщик</th>
+                                          <th className="text-right py-1.5 px-2 font-medium text-gray-500">Кол-во</th>
+                                          <th className="text-left py-1.5 px-2 font-medium text-gray-500">Дата прихода</th>
+                                          <th
+                                            className="text-left py-1.5 px-2 font-medium text-gray-500"
+                                            title="При приходе можно не указывать — тогда по партии считается, что срока годности нет."
+                                          >
+                                            Срок годности
+                                          </th>
+                                          <th className="w-20 py-1.5 px-2 font-medium text-gray-500 text-right">Списание</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-100">
+                                        {m.lots.map((lot: any) => (
+                                          <tr key={lot.id}>
+                                            <td className="py-1.5 px-2 text-gray-900">{lot.supplierName}</td>
+                                            <td className="py-1.5 px-2 text-right tabular-nums">{Number(lot.quantity).toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</td>
+                                            <td className="py-1.5 px-2 text-gray-700">{formatDate(lot.receivedAt)}</td>
+                                            <td className="py-1.5 px-2 text-gray-700">{formatDate(lot.expiryDate)}</td>
+                                            <td className="py-1.5 px-2 text-right">
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  navigate('/sales', {
+                                                    state: {
+                                                      writeOffPreset: {
+                                                        materialId: m.id,
+                                                        materialName: m.name,
+                                                        category: m.category,
+                                                        materialLotId: lot.id,
+                                                      },
+                                                    },
+                                                  });
+                                                }}
+                                                className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3882EC] focus-visible:ring-offset-1"
+                                              >
+                                                <ArrowUpTrayIcon className="h-3 w-3" />
+                                                Списание
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-gray-500">Партии не ведутся (учёт по средней) или партий нет.</p>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     ))
                   )}
                 </tbody>
@@ -256,8 +297,8 @@ export function WarehousePage() {
             </div>
           </Tab.Panel>
 
-          {/* Движения */}
-          <Tab.Panel className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+          {/* Движения (общий журнал за период) */}
+          <Tab.Panel className="rounded-lg border border-gray-200 bg-white overflow-hidden">
             <div className="p-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
               <span className="text-xs font-medium text-gray-600">Период:</span>
               <input
@@ -301,7 +342,7 @@ export function WarehousePage() {
                       const sum = q * c;
                       return (
                         <tr key={mov.id} className="hover:bg-gray-50/50">
-                          <td className="py-2 px-3 text-gray-700">{new Date(mov.movementDate).toLocaleDateString('ru-RU')}</td>
+                          <td className="py-2 px-3 text-gray-700">{formatDate(mov.movementDate)}</td>
                           <td className="py-2 px-3 font-medium text-gray-900">{mov.material?.name ?? mov.materialId}</td>
                           <td className="py-2 px-3">
                             <span className={mov.type === 'IN' ? 'text-green-700' : 'text-amber-700'}>
@@ -310,69 +351,6 @@ export function WarehousePage() {
                               ) : (
                                 <span className="inline-flex items-center gap-0.5"><ArrowRightOnRectangleIcon className="h-3.5 w-3.5" /> Расход</span>
                               )}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3 text-gray-600">{SOURCE_LABEL[mov.sourceType] ?? mov.sourceType}</td>
-                          <td className="py-2 px-3 text-right">{q.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</td>
-                          <td className="py-2 px-3 text-right">{formatMoney(c)}</td>
-                          <td className="py-2 px-3 text-right font-medium">{formatMoney(sum)}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Tab.Panel>
-
-          {/* Цепочка */}
-          <Tab.Panel className="rounded-xl border border-gray-100 bg-white overflow-hidden">
-            <div className="p-3 border-b border-gray-100">
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">Материал для отслеживания цепочки</label>
-              <ListboxSelect
-                value={chainMaterialId}
-                options={materialOptions}
-                onChange={setChainMaterialId}
-                placeholder="Выберите материал…"
-                buttonClassName="w-full max-w-md py-2"
-              />
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/80">
-                    <th className="text-left py-2.5 px-3 font-semibold text-gray-700">Дата</th>
-                    <th className="text-left py-2.5 px-3 font-semibold text-gray-700">Тип</th>
-                    <th className="text-left py-2.5 px-3 font-semibold text-gray-700">Источник</th>
-                    <th className="text-right py-2.5 px-3 font-semibold text-gray-700">Кол-во</th>
-                    <th className="text-right py-2.5 px-3 font-semibold text-gray-700">Цена</th>
-                    <th className="text-right py-2.5 px-3 font-semibold text-gray-700">Сумма</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {!chainMaterialId ? (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-gray-500 text-sm">
-                        Выберите материал, чтобы увидеть цепочку приходов и списаний
-                      </td>
-                    </tr>
-                  ) : chainMovements.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-gray-500 text-sm">
-                        Нет движений по этому материалу
-                      </td>
-                    </tr>
-                  ) : (
-                    chainMovements.map((mov: any) => {
-                      const q = Number(mov.quantity);
-                      const c = Number(mov.unitCost);
-                      const sum = q * c;
-                      return (
-                        <tr key={mov.id} className="hover:bg-gray-50/50">
-                          <td className="py-2 px-3 text-gray-700">{new Date(mov.movementDate).toLocaleDateString('ru-RU')}</td>
-                          <td className="py-2 px-3">
-                            <span className={mov.type === 'IN' ? 'text-green-700' : 'text-amber-700'}>
-                              {mov.type === 'IN' ? 'Приход' : 'Расход'}
                             </span>
                           </td>
                           <td className="py-2 px-3 text-gray-600">{SOURCE_LABEL[mov.sourceType] ?? mov.sourceType}</td>

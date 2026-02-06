@@ -70,6 +70,9 @@ export const stockApi = {
   deleteWriteOff: (id: string) => api.delete(`/stock/write-offs/${id}`).then((r) => r.data),
   getMovements: (params?: { materialId?: string; from?: string; to?: string; limit?: number }) =>
     api.get('/stock/movements', { params }).then((r) => r.data),
+  getInventoryWithLots: () => api.get('/stock/inventory-with-lots').then((r) => r.data),
+  getLotsByMaterial: (materialId: string) =>
+    api.get(`/stock/materials/${materialId}/lots`).then((r) => r.data),
 };
 
 export const servicesApi = {
