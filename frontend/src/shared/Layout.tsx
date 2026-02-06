@@ -11,7 +11,9 @@ import {
   Cog6ToothIcon,
   UserCircleIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   BuildingLibraryIcon,
+  FolderIcon,
 } from '@heroicons/react/24/outline';
 import {
   HomeIcon as HomeIconSolid,
@@ -22,16 +24,37 @@ import {
   ChartBarIcon as ChartBarIconSolid,
   Cog6ToothIcon as CogIconSolid,
   BuildingLibraryIcon as BuildingLibraryIconSolid,
+  FolderIcon as FolderIconSolid,
 } from '@heroicons/react/24/solid';
 import { useAuthStore } from './store/authStore';
 
-const nav = [
+type NavLink = {
+  to: string;
+  label: string;
+  Icon: typeof HomeIcon;
+  IconActive: typeof HomeIconSolid;
+};
+type NavGroup = {
+  label: string;
+  Icon: typeof FolderIcon;
+  IconActive: typeof FolderIconSolid;
+  children: NavLink[];
+};
+
+const navMain: (NavLink | NavGroup)[] = [
   { to: '/dashboard', label: 'Главная', Icon: HomeIcon, IconActive: HomeIconSolid },
   { to: '/warehouse', label: 'Склад', Icon: BuildingLibraryIcon, IconActive: BuildingLibraryIconSolid },
-  { to: '/materials', label: 'Библиотека материалов', Icon: CubeIcon, IconActive: CubeIconSolid },
-  { to: '/suppliers', label: 'Поставщики', Icon: TruckIcon, IconActive: TruckIconSolid },
-  { to: '/services', label: 'Услуги', Icon: WrenchScrewdriverIcon, IconActive: WrenchIconSolid },
-  { to: '/sales', label: 'Продажи и списания', Icon: BanknotesIcon, IconActive: BanknotesIconSolid },
+  { to: '/sales', label: 'Продажи', Icon: BanknotesIcon, IconActive: BanknotesIconSolid },
+  {
+    label: 'Справочники',
+    Icon: FolderIcon,
+    IconActive: FolderIconSolid,
+    children: [
+      { to: '/materials', label: 'Материалы', Icon: CubeIcon, IconActive: CubeIconSolid },
+      { to: '/suppliers', label: 'Поставщики', Icon: TruckIcon, IconActive: TruckIconSolid },
+      { to: '/services', label: 'Услуги', Icon: WrenchScrewdriverIcon, IconActive: WrenchIconSolid },
+    ],
+  },
   { to: '/reports', label: 'Отчёты', Icon: ChartBarIcon, IconActive: ChartBarIconSolid },
   { to: '/settings', label: 'Настройки', Icon: Cog6ToothIcon, IconActive: CogIconSolid },
 ];
@@ -58,22 +81,71 @@ export function Layout() {
             Основное
           </p>
           <ul className="space-y-0.5">
-            {nav.map((item) => {
-              const active = location.pathname === item.to;
-              const Icon = active ? item.IconActive : item.Icon;
+            {navMain.map((item) => {
+              if ('to' in item) {
+                const active = location.pathname === item.to;
+                const Icon = active ? item.IconActive : item.Icon;
+                return (
+                  <li key={item.to}>
+                    <Link
+                      to={item.to}
+                      className={`flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2 ${
+                        active
+                          ? 'bg-primary-600 text-white'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span>{item.label}</span>
+                    </Link>
+                  </li>
+                );
+              }
+              const group = item as NavGroup;
+              const childPaths = group.children.map((c) => c.to);
+              const isGroupActive = childPaths.includes(location.pathname);
               return (
-                <li key={item.to}>
-                  <Link
-                    to={item.to}
-                    className={`flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2 ${
-                      active
-                        ? 'bg-primary-600 text-white'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span>{item.label}</span>
-                  </Link>
+                <li key={group.label}>
+                  <Disclosure defaultOpen={isGroupActive}>
+                    {({ open }) => (
+                      <>
+                        <Disclosure.Button
+                          className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2 ${
+                            isGroupActive ? 'text-gray-900' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          }`}
+                        >
+                          <group.Icon className="h-4 w-4 shrink-0" />
+                          <span className="flex-1 text-left">{group.label}</span>
+                          {open ? (
+                            <ChevronDownIcon className="h-4 w-4 shrink-0 text-gray-400" />
+                          ) : (
+                            <ChevronRightIcon className="h-4 w-4 shrink-0 text-gray-400" />
+                          )}
+                        </Disclosure.Button>
+                        <Disclosure.Panel as="ul" className="mt-0.5 space-y-0.5 pl-4 border-l border-gray-100 ml-2">
+                          {group.children.map((child) => {
+                            const active = location.pathname === child.to;
+                            const Icon = active ? child.IconActive : child.Icon;
+                            return (
+                              <li key={child.to}>
+                                <Link
+                                  to={child.to}
+                                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2 ${
+                                    active
+                                      ? 'bg-primary-600 text-white'
+                                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                  }`}
+                                >
+                                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                                  <span>{child.label}</span>
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </Disclosure.Panel>
+                      </>
+                    )}
+                  </Disclosure>
                 </li>
               );
             })}

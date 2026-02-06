@@ -23,7 +23,6 @@ export function SalesPage() {
     if (preset?.materialId) {
       setTabIndex(1);
       setWriteOffPreset(preset);
-      navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.state]);
 
@@ -68,7 +67,7 @@ export function SalesPage() {
         </Tab.List>
         <Tab.Panels className="mt-2 focus:outline-none">
           <Tab.Panel><StockEntriesPanel /></Tab.Panel>
-          <Tab.Panel><WriteOffsPanel writeOffPreset={writeOffPreset} onConsumePreset={() => setWriteOffPreset(null)} /></Tab.Panel>
+          <Tab.Panel><WriteOffsPanel writeOffPreset={writeOffPreset} onConsumePreset={() => { setWriteOffPreset(null); navigate(location.pathname, { replace: true, state: {} }); }} /></Tab.Panel>
           <Tab.Panel><ServiceSalesPanel /></Tab.Panel>
         </Tab.Panels>
       </Tab.Group>
@@ -655,18 +654,24 @@ function WriteOffsPanel({
   useEffect(() => load(), []);
 
   useEffect(() => {
-    if (writeOffPreset?.materialId && materials.length > 0 && types.length > 0) {
-      const category = writeOffCategories.includes(writeOffPreset.category) ? writeOffPreset.category : writeOffCategories[0] ?? '';
-      setForm((f) => ({
-        ...f,
-        category,
-        materialId: writeOffPreset.materialId,
-        materialLotId: writeOffPreset.materialLotId ?? '',
-      }));
-      setShowForm(true);
-      onConsumePreset?.();
-    }
-  }, [writeOffPreset?.materialId, writeOffPreset?.category, writeOffPreset?.materialLotId, materials.length, types.length]);
+    if (!writeOffPreset?.materialId || loading || materials.length === 0 || types.length === 0) return;
+    const mat = materials.find((x: any) => x.id === writeOffPreset.materialId);
+    const categoryFromMaterial = mat ? ((mat.materialType?.name ?? '').toString().split(' ')[0] || '').trim() : '';
+    const category =
+      (categoryFromMaterial && writeOffCategories.includes(categoryFromMaterial))
+        ? categoryFromMaterial
+        : writeOffCategories.includes(writeOffPreset.category)
+          ? writeOffPreset.category
+          : (writeOffCategories[0] ?? '');
+    setForm((f) => ({
+      ...f,
+      category,
+      materialId: writeOffPreset.materialId,
+      materialLotId: writeOffPreset.materialLotId ?? '',
+    }));
+    setShowForm(true);
+    onConsumePreset?.();
+  }, [writeOffPreset?.materialId, writeOffPreset?.category, writeOffPreset?.materialLotId, loading, materials.length, types.length]);
 
   useEffect(() => {
     if (!form.materialId) {

@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from 'react';
-import { Tab } from '@headlessui/react';
+import { Tab, Dialog, Transition } from '@headlessui/react';
 import {
   ArrowRightOnRectangleIcon,
   ArrowLeftOnRectangleIcon,
@@ -8,11 +8,12 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ArrowUpTrayIcon,
+  ArrowLeftIcon,
 } from '@heroicons/react/24/outline';
-import { useNavigate } from 'react-router-dom';
-import { stockApi } from '../../shared/api/client';
+import { stockApi, materialTypesApi, materialsApi } from '../../shared/api/client';
 import { formatMoney } from '../../shared/format';
 import { PageHeader } from '../../shared/PageHeader';
+import { ListboxSelect } from '../../shared/ListboxSelect';
 
 function classNames(...classes: (string | boolean)[]) {
   return classes.filter(Boolean).join(' ');
@@ -39,7 +40,24 @@ export function WarehousePage() {
   const [movementsTo, setMovementsTo] = useState(() => new Date().toISOString().slice(0, 10));
 
   const [expandedMaterialId, setExpandedMaterialId] = useState<string | null>(null);
-  const navigate = useNavigate();
+
+  // Модальное окно списания (тот же функционал, что «Ручное списание» на странице Продажи)
+  const [showWriteOffModal, setShowWriteOffModal] = useState(false);
+  const [writeOffPreset, setWriteOffPreset] = useState<{ materialId: string; category: string; materialLotId: string } | null>(null);
+  const [woTypes, setWoTypes] = useState<any[]>([]);
+  const [woMaterials, setWoMaterials] = useState<any[]>([]);
+  const [woLots, setWoLots] = useState<any[]>([]);
+  const [woLotsLoading, setWoLotsLoading] = useState(false);
+  const [woForm, setWoForm] = useState({
+    category: '',
+    materialId: '',
+    materialLotId: '',
+    quantity: 1,
+    reason: '',
+    writeOffDate: new Date().toISOString().slice(0, 10),
+  });
+  const [woSaving, setWoSaving] = useState(false);
+  const [woError, setWoError] = useState('');
 
   const loadInventory = () => {
     setLoading(true);
@@ -57,6 +75,99 @@ export function WarehousePage() {
   useEffect(() => {
     if (movementsFrom && movementsTo) loadMovements();
   }, [movementsFrom, movementsTo]);
+
+  const writeOffCategories = [...new Set((woTypes || []).map((t: any) => (t?.name ?? '').toString().split(' ')[0]).filter(Boolean))].sort();
+  const getMaterialsInCategoryWriteOff = (category: string) => {
+    const typeIds = (woTypes || []).filter((t: any) => (t?.name ?? '') === category || (t?.name ?? '').startsWith(category + ' ')).map((t: any) => t.id);
+    return woMaterials.filter((m: any) => typeIds.includes(m.materialTypeId ?? m.materialType?.id ?? ''));
+  };
+
+  useEffect(() => {
+    if (!showWriteOffModal) return;
+    Promise.all([materialTypesApi.list(), materialsApi.list()]).then(([t, m]) => {
+      setWoTypes(t || []);
+      setWoMaterials(m || []);
+      const cats = [...new Set((t || []).map((ty: any) => (ty?.name ?? '').toString().split(' ')[0]).filter(Boolean))].sort();
+      if (writeOffPreset) {
+        const mat = (m || []).find((x: any) => x.id === writeOffPreset.materialId);
+        const categoryFromMaterial = mat ? ((mat.materialType?.name ?? '').toString().split(' ')[0] || '').trim() : '';
+        const category =
+          (categoryFromMaterial && cats.includes(categoryFromMaterial))
+            ? categoryFromMaterial
+            : cats.includes(writeOffPreset.category)
+              ? writeOffPreset.category
+              : (cats[0] ?? '');
+        setWoForm((f) => ({
+          ...f,
+          category,
+          materialId: writeOffPreset.materialId,
+          materialLotId: writeOffPreset.materialLotId ?? '',
+        }));
+      } else {
+        setWoForm((f) => ({
+          ...f,
+          category: cats[0] ?? '',
+          materialId: '',
+          materialLotId: '',
+          quantity: 1,
+          reason: '',
+          writeOffDate: new Date().toISOString().slice(0, 10),
+        }));
+      }
+    });
+  }, [showWriteOffModal, writeOffPreset]);
+
+  useEffect(() => {
+    if (!showWriteOffModal || !woForm.materialId) {
+      setWoLots([]);
+      return;
+    }
+    setWoLotsLoading(true);
+    stockApi.getLotsByMaterial(woForm.materialId).then(setWoLots).catch(() => setWoLots([])).finally(() => setWoLotsLoading(false));
+  }, [showWriteOffModal, woForm.materialId]);
+
+  const openWriteOffModal = (preset: { materialId: string; category: string; materialLotId: string } | null) => {
+    setWriteOffPreset(preset);
+    setWoError('');
+    setWoForm({
+      category: preset?.category ?? '',
+      materialId: preset?.materialId ?? '',
+      materialLotId: preset?.materialLotId ?? '',
+      quantity: 1,
+      reason: '',
+      writeOffDate: new Date().toISOString().slice(0, 10),
+    });
+    setShowWriteOffModal(true);
+  };
+
+  const closeWriteOffModal = () => {
+    setShowWriteOffModal(false);
+    setWriteOffPreset(null);
+  };
+
+  const saveWriteOff = async () => {
+    if (!woForm.materialId) {
+      setWoError('Выберите категорию и маркировку (бренд) материала');
+      return;
+    }
+    setWoError('');
+    setWoSaving(true);
+    try {
+      await stockApi.createWriteOff({
+        materialId: woForm.materialId,
+        ...(woForm.materialLotId ? { materialLotId: woForm.materialLotId } : {}),
+        quantity: woForm.quantity,
+        reason: woForm.reason,
+        writeOffDate: woForm.writeOffDate,
+      });
+      closeWriteOffModal();
+      loadInventory();
+    } catch (e: any) {
+      setWoError(e.response?.data?.message ?? 'Ошибка');
+    } finally {
+      setWoSaving(false);
+    }
+  };
 
   const toggleExpand = (materialId: string) => {
     setExpandedMaterialId((prev) => (prev === materialId ? null : materialId));
@@ -260,15 +371,10 @@ export function WarehousePage() {
                                                 type="button"
                                                 onClick={(e) => {
                                                   e.stopPropagation();
-                                                  navigate('/sales', {
-                                                    state: {
-                                                      writeOffPreset: {
-                                                        materialId: m.id,
-                                                        materialName: m.name,
-                                                        category: m.category,
-                                                        materialLotId: lot.id,
-                                                      },
-                                                    },
+                                                  openWriteOffModal({
+                                                    materialId: m.id,
+                                                    category: m.category ?? '',
+                                                    materialLotId: lot.id,
                                                   });
                                                 }}
                                                 className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3882EC] focus-visible:ring-offset-1"
@@ -367,6 +473,109 @@ export function WarehousePage() {
           </Tab.Panel>
         </Tab.Panels>
       </Tab.Group>
+
+      <Transition show={showWriteOffModal} as={Fragment}>
+        <Dialog onClose={closeWriteOffModal} className="relative z-50">
+          <Transition.Child as={Fragment} enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100" leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0">
+            <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+          </Transition.Child>
+          <div className="fixed inset-0 flex items-center justify-center p-4">
+            <Transition.Child as={Fragment} enter="ease-out duration-200" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100" leave="ease-in duration-150" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95">
+              <Dialog.Panel className="bg-white rounded-xl shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-4">
+                <Dialog.Title className="text-base font-semibold text-gray-900">Списание</Dialog.Title>
+                <p className="text-xs text-gray-500 mt-1 mb-3">Категория → маркировка (бренд) материала для списания.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-3">
+                    <p className="text-xs font-medium text-gray-500 mb-2">Материал и объём</p>
+                    <div className="space-y-2">
+                      <ListboxSelect
+                        label="Категория"
+                        value={woForm.category}
+                        options={writeOffCategories.map((g) => ({ id: g, name: g }))}
+                        onChange={(id) => setWoForm((f) => ({ ...f, category: id, materialId: '', materialLotId: '' }))}
+                        placeholder="Напр. Адгезив"
+                      />
+                      <ListboxSelect
+                        label="Маркировка (Бренд)"
+                        value={woForm.materialId}
+                        options={getMaterialsInCategoryWriteOff(woForm.category).map((mat: any) => ({ id: mat.id, name: mat.name }))}
+                        onChange={(id) => setWoForm((f) => ({ ...f, materialId: id, materialLotId: '' }))}
+                        placeholder="Конкретный материал"
+                      />
+                      {woForm.materialId && (
+                        <div>
+                          <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Партия (поставщик)</label>
+                          <ListboxSelect
+                            value={woForm.materialLotId}
+                            options={[
+                              { id: '', name: 'Не указывать (по FIFO / средней)' },
+                              ...woLots.map((l: any) => ({
+                                id: l.id,
+                                name: `${l.supplierName}, остаток ${Number(l.quantity).toLocaleString('ru-RU')}, срок ${l.expiryDate ? new Date(l.expiryDate).toLocaleDateString('ru-RU') : '—'}`,
+                              })),
+                            ]}
+                            onChange={(id) => setWoForm((f) => ({ ...f, materialLotId: id }))}
+                            placeholder={woLotsLoading ? 'Загрузка…' : 'Выберите партию или оставьте по FIFO/средней'}
+                            buttonClassName="py-1.5 text-xs border border-gray-200 rounded"
+                          />
+                          <p className="text-[11px] text-gray-500 mt-0.5">Укажите партию, чтобы списать именно с неё; иначе списание по настройкам склада.</p>
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Количество</label>
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min={0.001}
+                            step={0.01}
+                            className="border border-gray-200 rounded px-2 py-1.5 text-sm flex-1 max-w-[120px]"
+                            value={woForm.quantity}
+                            onChange={(e) => setWoForm((f) => ({ ...f, quantity: parseFloat(e.target.value) || 0 }))}
+                          />
+                          <span className="text-sm text-gray-500">{woMaterials.find((mat: any) => mat.id === woForm.materialId)?.unit ?? 'шт'}</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-3">
+                    <p className="text-xs font-medium text-gray-500 mb-2">Причина и дата</p>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Причина</label>
+                        <input
+                          className="border border-gray-200 rounded px-2 py-1.5 text-sm w-full"
+                          placeholder="Брак, порча, истёк срок…"
+                          value={woForm.reason}
+                          onChange={(e) => setWoForm((f) => ({ ...f, reason: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Дата списания</label>
+                        <input
+                          type="date"
+                          className="border border-gray-200 rounded px-2 py-1.5 text-sm w-full"
+                          value={woForm.writeOffDate}
+                          onChange={(e) => setWoForm((f) => ({ ...f, writeOffDate: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {woError && <p className="mt-3 text-sm text-gray-700 rounded bg-gray-100 px-3 py-1.5" role="alert">{woError}</p>}
+                <div className="mt-4 flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
+                  <button type="button" onClick={closeWriteOffModal} className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <ArrowLeftIcon className="h-4 w-4" /> Назад
+                  </button>
+                  <button type="button" onClick={saveWriteOff} className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50" disabled={woSaving}>
+                    {woSaving ? 'Сохранение…' : 'Списать'}
+                  </button>
+                </div>
+              </Dialog.Panel>
+            </Transition.Child>
+          </div>
+        </Dialog>
+      </Transition>
     </div>
   );
 }

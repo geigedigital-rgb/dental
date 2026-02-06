@@ -170,21 +170,26 @@ export function Dashboard() {
       <section aria-labelledby="low-stock-heading">
         <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
           <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-100">
-            <h2
-              id="low-stock-heading"
-              className="text-sm font-medium text-gray-900 flex items-center gap-2"
-            >
-              <ExclamationTriangleIcon className="h-4 w-4 text-gray-400" aria-hidden />
-              Минимальный остаток
-              {alerts.length > 0 && (
-                <span
-                  className="inline-flex items-center rounded-md bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 tabular-nums"
-                  aria-label={`Количество позиций: ${alerts.length}`}
-                >
-                  {alerts.length}
-                </span>
-              )}
-            </h2>
+            <div>
+              <h2
+                id="low-stock-heading"
+                className="text-sm font-medium text-gray-900 flex items-center gap-2"
+              >
+                <ExclamationTriangleIcon className="h-4 w-4 text-gray-400" aria-hidden />
+                Минимальный остаток
+                {alerts.length > 0 && (
+                  <span
+                    className="inline-flex items-center rounded-md bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 tabular-nums"
+                    aria-label={`Количество позиций: ${alerts.length}`}
+                  >
+                    {alerts.length}
+                  </span>
+                )}
+              </h2>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                Позиции, у которых остаток ≤ минимального порога (порог задаётся в карточке материала) или остаток 0.
+              </p>
+            </div>
             <div className="flex gap-2">
               <Link
                 to="/warehouse"
@@ -247,7 +252,7 @@ export function Dashboard() {
                           {a.materialName}
                         </Link>
                       </td>
-                      <td className="py-1.5 px-3 text-gray-500">{a.category || '—'}</td>
+                      <td className="py-1.5 px-3 text-gray-500">{(a.category || '').toString().split(' ')[0] || '—'}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums bg-red-50/50">
                         <span className={a.isZero ? 'text-red-600 font-medium' : 'text-amber-700'}>
                           {a.currentQuantity}
