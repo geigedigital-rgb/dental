@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Tab, Dialog, Transition } from '@headlessui/react';
-import { ArrowDownTrayIcon, ArrowUpTrayIcon, ShoppingCartIcon, ArrowLeftIcon, TrashIcon, CheckIcon, PencilSquareIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, ShoppingCartIcon, ArrowLeftIcon, TrashIcon, CheckIcon, PencilSquareIcon, ClockIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { stockApi, salesApi, suppliersApi, materialsApi, materialTypesApi, servicesApi, reportsApi, settingsApi } from '../../shared/api/client';
 import { formatMoney } from '../../shared/format';
 import { PageHeader } from '../../shared/PageHeader';
@@ -26,46 +26,47 @@ export function SalesPage() {
     }
   }, [location.state]);
 
+  const mainTabs = [
+    { name: 'Приходы', icon: ArrowDownTrayIcon, description: 'Накладные и приход товара' },
+    { name: 'Списания', icon: ArrowUpTrayIcon, description: 'Ручное списание материалов' },
+    { name: 'Продажи услуг', icon: ShoppingCartIcon, description: 'Продажи и чеки' },
+  ];
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <PageHeader
         title="Продажи и списания"
         breadcrumbs={[{ label: 'Главная', to: '/dashboard' }, { label: 'Продажи и списания' }]}
       />
       <Tab.Group selectedIndex={tabIndex} onChange={setTabIndex}>
-        <Tab.List className="flex gap-0.5 rounded-lg border border-gray-100 bg-white p-0.5 max-w-md">
-          <Tab
-            className={({ selected }) =>
-              classNames(
-                'rounded px-3 py-1.5 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2',
-                selected ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 ui-not-selected:hover:text-gray-700'
-              )
-            }
-          >
-            Приходы
-          </Tab>
-          <Tab
-            className={({ selected }) =>
-              classNames(
-                'rounded px-3 py-1.5 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2',
-                selected ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 ui-not-selected:hover:text-gray-700'
-              )
-            }
-          >
-            Списания
-          </Tab>
-          <Tab
-            className={({ selected }) =>
-              classNames(
-                'rounded px-3 py-1.5 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2',
-                selected ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 ui-not-selected:hover:text-gray-700'
-              )
-            }
-          >
-            Продажи услуг
-          </Tab>
-        </Tab.List>
-        <Tab.Panels className="mt-2 focus:outline-none">
+        <div role="tablist" aria-label="Основные разделы: приходы, списания, продажи" className="flex flex-wrap gap-2">
+          <Tab.List className="contents">
+            {mainTabs.map((tab) => (
+              <Tab key={tab.name} className="inline-flex rounded-xl p-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3882EC] focus-visible:ring-offset-2 [&:focus]:outline-none">
+                {({ selected }) => (
+                  <span
+                    className={classNames(
+                      'flex items-center gap-3 rounded-lg border px-4 py-3 text-sm font-medium transition-all min-w-[140px]',
+                      'focus:outline-none',
+                      selected
+                        ? 'border-[#3882EC]/40 bg-[#3882EC]/5 text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.06)] ring-1 ring-[#3882EC]/20'
+                        : 'border-gray-200/80 bg-gray-50/70 text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-gray-200'
+                    )}
+                  >
+                    <span className={classNames('flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors', selected ? 'bg-[#3882EC]/10' : 'bg-gray-100/80')}>
+                      <tab.icon className={classNames('h-5 w-5', selected ? 'text-[#3882EC]' : 'text-gray-500')} aria-hidden />
+                    </span>
+                    <span className="flex flex-col items-start">
+                      <span>{tab.name}</span>
+                      <span className={classNames('text-[11px] font-normal', selected ? 'text-gray-600' : 'text-gray-400')}>{tab.description}</span>
+                    </span>
+                  </span>
+                )}
+              </Tab>
+            ))}
+          </Tab.List>
+        </div>
+        <Tab.Panels className="mt-4 focus:outline-none">
           <Tab.Panel><StockEntriesPanel /></Tab.Panel>
           <Tab.Panel><WriteOffsPanel writeOffPreset={writeOffPreset} onConsumePreset={() => { setWriteOffPreset(null); navigate(location.pathname, { replace: true, state: {} }); }} /></Tab.Panel>
           <Tab.Panel><ServiceSalesPanel /></Tab.Panel>
@@ -88,6 +89,7 @@ function StockEntriesPanel() {
   const [showEntryDetailModal, setShowEntryDetailModal] = useState(false);
   const [entryDetailError, setEntryDetailError] = useState('');
   const [entryDetailEdit, setEntryDetailEdit] = useState({ note: '', entryDate: '', deliveryCost: '' });
+  const [entryDetailEditing, setEntryDetailEditing] = useState(false);
   const [entryHistoryLogs, setEntryHistoryLogs] = useState<any[]>([]);
   const [entryHistoryLoading, setEntryHistoryLoading] = useState(false);
   const [showDeleteEntryConfirm, setShowDeleteEntryConfirm] = useState(false);
@@ -142,6 +144,7 @@ function StockEntriesPanel() {
   const openEntryDetail = (e: any) => {
     setDetailEntry(null);
     setEntryDetailError('');
+    setEntryDetailEditing(false);
     setEntryDetailEdit({
       note: e.note ?? '',
       entryDate: e.entryDate ? new Date(e.entryDate).toISOString().slice(0, 10) : '',
@@ -159,6 +162,23 @@ function StockEntriesPanel() {
     }).catch((err) => setEntryDetailError(err.response?.data?.message ?? 'Ошибка загрузки')).finally(() => setDetailLoading(false));
   };
 
+  const entryDetailEditDirty = detailEntry && (
+    entryDetailEdit.entryDate !== (detailEntry.entryDate ? new Date(detailEntry.entryDate).toISOString().slice(0, 10) : '') ||
+    entryDetailEdit.note !== (detailEntry.note ?? '') ||
+    entryDetailEdit.deliveryCost !== (detailEntry.deliveryCost != null ? String(detailEntry.deliveryCost) : '')
+  );
+
+  const cancelEntryDetailEdit = () => {
+    if (detailEntry) {
+      setEntryDetailEdit({
+        note: detailEntry.note ?? '',
+        entryDate: detailEntry.entryDate ? new Date(detailEntry.entryDate).toISOString().slice(0, 10) : '',
+        deliveryCost: detailEntry.deliveryCost != null ? String(detailEntry.deliveryCost) : '',
+      });
+    }
+    setEntryDetailEditing(false);
+  };
+
   const saveEntryDetailEdit = async () => {
     if (!detailEntry) return;
     setEntryDetailError('');
@@ -169,6 +189,7 @@ function StockEntriesPanel() {
         deliveryCost: entryDetailEdit.deliveryCost ? Number(entryDetailEdit.deliveryCost) : undefined,
       });
       setDetailEntry((prev: any) => prev && { ...prev, note: entryDetailEdit.note, entryDate: entryDetailEdit.entryDate, deliveryCost: entryDetailEdit.deliveryCost });
+      setEntryDetailEditing(false);
       load();
       loadEntryHistory();
     } catch (err: any) {
@@ -555,93 +576,87 @@ function StockEntriesPanel() {
                   <p className="py-8 text-center text-sm text-gray-500">Загрузка…</p>
                 ) : detailEntry ? (
                   <>
-                    <Dialog.Title className="sr-only">Детали прихода</Dialog.Title>
+                    <Dialog.Title className="dialog-title text-base">Детали прихода</Dialog.Title>
                     {(() => {
                       const itemsTotal = (detailEntry.items ?? []).reduce((s: number, it: any) => s + Number(it.quantity) * Number(it.unitPrice), 0);
-                      const delivery = Number(entryDetailEdit.deliveryCost || (detailEntry.deliveryCost ?? 0)) || 0;
-                      const total = itemsTotal + delivery;
-                      const dateObj = entryDetailEdit.entryDate ? new Date(entryDetailEdit.entryDate + 'T12:00:00') : new Date(detailEntry.entryDate);
-                      const dateStr = dateObj.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+                      const deliveryVal = entryDetailEditing ? (Number(entryDetailEdit.deliveryCost) || 0) : Number(detailEntry.deliveryCost ?? 0) || 0;
+                      const total = itemsTotal + deliveryVal;
+                      const displayDate = entryDetailEditing ? entryDetailEdit.entryDate : (detailEntry.entryDate ? new Date(detailEntry.entryDate).toISOString().slice(0, 10) : '');
+                      const displayDateFormatted = displayDate ? new Date(displayDate + 'T12:00:00').toLocaleDateString('ru-RU') : '—';
                       return (
-                        <>
-                          <div className="text-center pb-4 border-b border-gray-100">
-                            <p className="text-3xl font-bold tabular-nums text-red-600 tracking-tight">
-                              −{new Intl.NumberFormat('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(total)}
-                            </p>
-                            <p className="text-sm text-gray-500 mt-1 capitalize">{dateStr}</p>
+                        <div className="mt-2 space-y-3">
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                            <span className="text-gray-500">Поставщик</span>
+                            <span className="text-gray-900">{detailEntry.supplier?.name ?? '—'}</span>
+                            <span className="text-gray-500">Дата</span>
+                            {entryDetailEditing ? (
+                              <input
+                                type="date"
+                                className="text-gray-900 border border-gray-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-[#3882EC] focus:border-[#3882EC]"
+                                value={entryDetailEdit.entryDate}
+                                onChange={(e) => setEntryDetailEdit((d) => ({ ...d, entryDate: e.target.value }))}
+                              />
+                            ) : (
+                              <span className="text-gray-900">{displayDateFormatted}</span>
+                            )}
                           </div>
-
-                          <div className="mt-4">
-                            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Обзор</h4>
-                            <div className="rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden divide-y divide-gray-100">
-                              <div className="flex justify-between items-center px-4 py-3">
-                                <span className="text-sm text-gray-500">Поставщик</span>
-                                <span className="text-sm font-medium text-gray-900">{detailEntry.supplier?.name ?? '—'}</span>
-                              </div>
-                              <div className="flex justify-between items-center px-4 py-3">
-                                <span className="text-sm text-gray-500">Дата</span>
-                                <input
-                                  type="date"
-                                  className="text-sm font-medium text-gray-900 bg-transparent border-0 p-0 focus:ring-0 focus:outline-none"
-                                  value={entryDetailEdit.entryDate}
-                                  onChange={(e) => setEntryDetailEdit((d) => ({ ...d, entryDate: e.target.value }))}
-                                />
-                              </div>
-                              <div className="flex justify-between items-center px-4 py-3">
-                                <span className="text-sm text-gray-500">Тип</span>
-                                <span className="text-sm font-medium text-gray-900">Приход</span>
-                              </div>
-                              <div className="flex justify-between items-center px-4 py-3">
-                                <span className="text-sm text-gray-500">Сумма</span>
-                                <span className="text-sm font-semibold tabular-nums text-gray-900">{formatMoney(total)}</span>
-                              </div>
-                            </div>
+                          <div>
+                            <p className="text-[11px] text-gray-500 mb-1">Позиции</p>
+                            <ul className="text-xs space-y-0.5 max-h-32 overflow-y-auto">
+                              {(detailEntry.items ?? []).map((item: any) => (
+                                <li key={item.id} className="flex justify-between text-gray-900">
+                                  <span>{item.material?.name ?? item.materialId}</span>
+                                  <span className="tabular-nums shrink-0">{Number(item.quantity)} × {formatMoney(Number(item.unitPrice))}</span>
+                                </li>
+                              ))}
+                            </ul>
                           </div>
-
-                          <div className="mt-4">
-                            <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Детали</h4>
-                            <div className="rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden divide-y divide-gray-100">
-                              <div className="px-4 py-3">
-                                <span className="text-sm text-gray-500 block mb-2">Позиции</span>
-                                <ul className="text-sm space-y-1.5">
-                                  {(detailEntry.items ?? []).map((item: any) => (
-                                    <li key={item.id} className="flex justify-between text-gray-900">
-                                      <span>{item.material?.name ?? item.materialId}</span>
-                                      <span className="tabular-nums">{Number(item.quantity)} × {formatMoney(Number(item.unitPrice))}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                              <div className="flex justify-between items-center px-4 py-3">
-                                <span className="text-sm text-gray-500">Доставка</span>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  className="text-sm font-medium text-gray-900 bg-transparent border-0 p-0 w-24 text-right focus:ring-0 focus:outline-none"
-                                  value={entryDetailEdit.deliveryCost}
-                                  onChange={(e) => setEntryDetailEdit((d) => ({ ...d, deliveryCost: e.target.value }))}
-                                  placeholder="0"
-                                />
-                              </div>
-                              <div className="px-4 py-3">
-                                <span className="text-sm text-gray-500 block mb-1">Примечание</span>
-                                <input
-                                  className="input w-full py-2 text-sm rounded-lg"
-                                  value={entryDetailEdit.note}
-                                  onChange={(e) => setEntryDetailEdit((d) => ({ ...d, note: e.target.value }))}
-                                  placeholder="Введите примечание"
-                                />
-                              </div>
-                            </div>
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-gray-500 w-16">Доставка</span>
+                            {entryDetailEditing ? (
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="border border-gray-200 rounded px-2 py-1 w-20 text-right text-xs focus:ring-1 focus:ring-[#3882EC] focus:border-[#3882EC]"
+                                value={entryDetailEdit.deliveryCost}
+                                onChange={(e) => setEntryDetailEdit((d) => ({ ...d, deliveryCost: e.target.value }))}
+                                placeholder="0"
+                              />
+                            ) : (
+                              <span className="text-gray-900">{formatMoney(Number(detailEntry.deliveryCost ?? 0))}</span>
+                            )}
                           </div>
-
-                          {entryDetailError && <p className="mt-3 text-sm text-red-600" role="alert">{entryDetailError}</p>}
-                          <div className="flex flex-wrap gap-2 pt-4 mt-4 border-t border-gray-200">
-                            <button type="button" onClick={saveEntryDetailEdit} className="btn-primary text-sm py-2 px-4 inline-flex items-center gap-1.5"><PencilSquareIcon className="h-4 w-4" /> Сохранить</button>
-                            <button type="button" onClick={openDeleteEntryConfirm} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100">Удалить</button>
-                            <button type="button" onClick={() => setShowEntryDetailModal(false)} className="btn-secondary text-sm py-2 px-4">Закрыть</button>
+                          <div className="text-xs">
+                            <span className="text-gray-500 block mb-0.5">Примечание</span>
+                            {entryDetailEditing ? (
+                              <input
+                                className="input w-full py-1.5 text-xs rounded border border-gray-200"
+                                value={entryDetailEdit.note}
+                                onChange={(e) => setEntryDetailEdit((d) => ({ ...d, note: e.target.value }))}
+                                placeholder="Необязательно"
+                              />
+                            ) : (
+                              <span className="text-gray-900">{detailEntry.note || '—'}</span>
+                            )}
                           </div>
-                        </>
+                          <div className="pt-2 border-t border-gray-200 flex justify-between items-center">
+                            <span className="text-xs text-gray-500">Итого</span>
+                            <span className="text-sm font-semibold tabular-nums text-gray-900">{formatMoney(total)}</span>
+                          </div>
+                          {entryDetailError && <p className="text-xs text-red-600" role="alert">{entryDetailError}</p>}
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {entryDetailEditing ? (
+                              <>
+                                <button type="button" onClick={saveEntryDetailEdit} disabled={!entryDetailEditDirty} className="btn-primary text-xs py-1.5 px-3 inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"><PencilSquareIcon className="h-3.5 w-3.5" /> Сохранить</button>
+                                <button type="button" onClick={cancelEntryDetailEdit} className="btn-secondary text-xs py-1.5 px-3">Отмена</button>
+                              </>
+                            ) : (
+                              <button type="button" onClick={() => setEntryDetailEditing(true)} className="btn-primary text-xs py-1.5 px-3 inline-flex items-center gap-1"><PencilSquareIcon className="h-3.5 w-3.5" /> Изменить</button>
+                            )}
+                            <button type="button" onClick={openDeleteEntryConfirm} className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100">Удалить</button>
+                            <button type="button" onClick={() => setShowEntryDetailModal(false)} className="btn-secondary text-xs py-1.5 px-3">Закрыть</button>
+                          </div>
+                        </div>
                       );
                     })()}
                   </>
@@ -700,6 +715,7 @@ function WriteOffsPanel({
   const [showWODetailModal, setShowWODetailModal] = useState(false);
   const [woDetailError, setWoDetailError] = useState('');
   const [woDetailEdit, setWoDetailEdit] = useState({ reason: '', writeOffDate: '' });
+  const [woDetailEditing, setWoDetailEditing] = useState(false);
   const [woHistoryLogs, setWoHistoryLogs] = useState<any[]>([]);
   const [woHistoryLoading, setWoHistoryLoading] = useState(false);
   const [showDeleteWriteOffConfirm, setShowDeleteWriteOffConfirm] = useState(false);
@@ -760,6 +776,7 @@ function WriteOffsPanel({
   const openWoDetail = (w: any) => {
     setDetailWriteOff(null);
     setWoDetailError('');
+    setWoDetailEditing(false);
     setWoDetailEdit({
       reason: w.reason ?? '',
       writeOffDate: w.writeOffDate ? new Date(w.writeOffDate).toISOString().slice(0, 10) : '',
@@ -775,6 +792,21 @@ function WriteOffsPanel({
     }).catch((err) => setWoDetailError(err.response?.data?.message ?? 'Ошибка загрузки')).finally(() => setDetailWOLoading(false));
   };
 
+  const woDetailEditDirty = detailWriteOff && (
+    woDetailEdit.reason !== (detailWriteOff.reason ?? '') ||
+    woDetailEdit.writeOffDate !== (detailWriteOff.writeOffDate ? new Date(detailWriteOff.writeOffDate).toISOString().slice(0, 10) : '')
+  );
+
+  const cancelWoDetailEdit = () => {
+    if (detailWriteOff) {
+      setWoDetailEdit({
+        reason: detailWriteOff.reason ?? '',
+        writeOffDate: detailWriteOff.writeOffDate ? new Date(detailWriteOff.writeOffDate).toISOString().slice(0, 10) : '',
+      });
+    }
+    setWoDetailEditing(false);
+  };
+
   const saveWoDetailEdit = async () => {
     if (!detailWriteOff) return;
     setWoDetailError('');
@@ -784,6 +816,7 @@ function WriteOffsPanel({
         writeOffDate: woDetailEdit.writeOffDate,
       });
       setDetailWriteOff((prev: any) => prev && { ...prev, reason: woDetailEdit.reason, writeOffDate: woDetailEdit.writeOffDate });
+      setWoDetailEditing(false);
       load();
       loadWoHistory();
     } catch (err: any) {
@@ -1007,33 +1040,63 @@ function WriteOffsPanel({
           </Transition.Child>
           <div className="fixed inset-0 flex items-center justify-center p-4">
             <Transition.Child as={Fragment} enter="ease-out duration-200" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100" leave="ease-in duration-150" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95">
-              <Dialog.Panel className="dialog-panel max-w-lg w-full max-h-[90vh] overflow-y-auto">
-                <Dialog.Title className="dialog-title">Детали списания</Dialog.Title>
+              <Dialog.Panel className="dialog-panel max-w-md w-full max-h-[90vh] overflow-y-auto">
                 {detailWOLoading ? (
-                  <p className="py-6 text-center text-sm text-gray-500">Загрузка…</p>
+                  <p className="py-8 text-center text-sm text-gray-500">Загрузка…</p>
                 ) : detailWriteOff ? (
-                  <div className="mt-3 space-y-3">
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div><span className="text-gray-500">Материал:</span> {detailWriteOff.material?.name ?? '—'}</div>
-                      <div><span className="text-gray-500">Количество:</span> {Number(detailWriteOff.quantity)} {detailWriteOff.material?.unit ?? 'шт'}</div>
+                  <>
+                    <Dialog.Title className="dialog-title text-base">Детали списания</Dialog.Title>
+                    <div className="mt-2 space-y-3">
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                        <span className="text-gray-500">Материал</span>
+                        <span className="text-gray-900">{detailWriteOff.material?.name ?? '—'}</span>
+                        <span className="text-gray-500">Количество</span>
+                        <span className="text-gray-900">{Number(detailWriteOff.quantity)} {detailWriteOff.material?.unit ?? 'шт'}</span>
+                        <span className="text-gray-500">Дата списания</span>
+                        {woDetailEditing ? (
+                          <input
+                            type="date"
+                            className="text-gray-900 border border-gray-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-[#3882EC] focus:border-[#3882EC]"
+                            value={woDetailEdit.writeOffDate}
+                            onChange={(e) => setWoDetailEdit((d) => ({ ...d, writeOffDate: e.target.value }))}
+                          />
+                        ) : (
+                          <span className="text-gray-900">{detailWriteOff.writeOffDate ? new Date(detailWriteOff.writeOffDate).toLocaleDateString('ru-RU') : '—'}</span>
+                        )}
+                      </div>
+                      <div className="text-xs">
+                        <span className="text-gray-500 block mb-0.5">Причина</span>
+                        {woDetailEditing ? (
+                          <input
+                            className="input w-full py-1.5 text-xs rounded border border-gray-200"
+                            value={woDetailEdit.reason}
+                            onChange={(e) => setWoDetailEdit((d) => ({ ...d, reason: e.target.value }))}
+                            placeholder="Необязательно"
+                          />
+                        ) : (
+                          <span className="text-gray-900">{detailWriteOff.reason || '—'}</span>
+                        )}
+                      </div>
+                      {woDetailError && <p className="text-xs text-red-600" role="alert">{woDetailError}</p>}
+                      <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
+                        {woDetailEditing ? (
+                          <>
+                            <button type="button" onClick={saveWoDetailEdit} disabled={!woDetailEditDirty} className="btn-primary text-xs py-1.5 px-3 inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"><PencilSquareIcon className="h-3.5 w-3.5" /> Сохранить</button>
+                            <button type="button" onClick={cancelWoDetailEdit} className="btn-secondary text-xs py-1.5 px-3">Отмена</button>
+                          </>
+                        ) : (
+                          <button type="button" onClick={() => setWoDetailEditing(true)} className="btn-primary text-xs py-1.5 px-3 inline-flex items-center gap-1"><PencilSquareIcon className="h-3.5 w-3.5" /> Изменить</button>
+                        )}
+                        <button type="button" onClick={openDeleteWriteOffConfirm} className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100">Удалить</button>
+                        <button type="button" onClick={() => setShowWODetailModal(false)} className="btn-secondary text-xs py-1.5 px-3">Закрыть</button>
+                      </div>
                     </div>
-                    <div>
-                      <label className="label text-xs">Причина</label>
-                      <input className="input w-full py-1.5 text-sm" value={woDetailEdit.reason} onChange={(e) => setWoDetailEdit((d) => ({ ...d, reason: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label className="label text-xs">Дата списания</label>
-                      <input type="date" className="input w-full py-1.5 text-sm" value={woDetailEdit.writeOffDate} onChange={(e) => setWoDetailEdit((d) => ({ ...d, writeOffDate: e.target.value }))} />
-                    </div>
-                    {woDetailError && <p className="text-sm text-red-600" role="alert">{woDetailError}</p>}
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
-                      <button type="button" onClick={saveWoDetailEdit} className="btn-primary text-sm py-1.5 px-3 inline-flex items-center gap-1"><PencilSquareIcon className="h-4 w-4" /> Сохранить</button>
-                      <button type="button" onClick={openDeleteWriteOffConfirm} className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100">Удалить</button>
-                      <button type="button" onClick={() => setShowWODetailModal(false)} className="btn-secondary text-sm py-1.5 px-3">Закрыть</button>
-                    </div>
-                  </div>
+                  </>
                 ) : (
-                  <p className="py-4 text-sm text-gray-500">{woDetailError || 'Не удалось загрузить данные'}</p>
+                  <>
+                    <Dialog.Title className="dialog-title">Детали списания</Dialog.Title>
+                    <p className="py-4 text-sm text-gray-500">{woDetailError || 'Не удалось загрузить данные'}</p>
+                  </>
                 )}
               </Dialog.Panel>
             </Transition.Child>
@@ -1806,17 +1869,20 @@ function ServiceSalesPanel() {
                 </div>
               )}
               {stockShortages.length > 0 && (
-                <div role="alert" className="mt-2 rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-2 text-[11px] text-gray-600">
-                  <p className="font-medium mb-1">На складе недостаточно материалов для регистрации этой услуги.</p>
-                  <ul className="list-none space-y-0.5">
-                    {stockShortages.map((s) => (
-                      <li key={s.materialId} className="flex items-baseline gap-1.5">
-                        <span className="text-amber-600 shrink-0">•</span>
-                        <span><strong>{s.name}</strong> — нужно {s.need.toLocaleString('ru-RU')}, в наличии {s.have.toLocaleString('ru-RU')}.</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-1.5 text-gray-600">Пополните склад (приход) или уменьшите количество услуг/материалов в таблице.</p>
+                <div role="alert" className="mt-2 flex gap-2 rounded-lg border border-red-200 bg-red-50/80 px-2.5 py-2 text-[11px] text-gray-700">
+                  <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-red-500" aria-hidden />
+                  <div>
+                    <p className="font-medium mb-1 text-red-800">На складе недостаточно материалов для регистрации этой услуги.</p>
+                    <ul className="list-none space-y-0.5">
+                      {stockShortages.map((s) => (
+                        <li key={s.materialId} className="flex items-baseline gap-1.5">
+                          <span className="text-red-500 shrink-0">•</span>
+                          <span><strong>{s.name}</strong> — нужно {s.need.toLocaleString('ru-RU')}, в наличии {s.have.toLocaleString('ru-RU')}.</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-1.5 text-gray-600">Пополните склад (приход) или уменьшите количество услуг/материалов в таблице.</p>
+                  </div>
                 </div>
               )}
                 </div>
