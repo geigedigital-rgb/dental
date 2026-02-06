@@ -18,7 +18,7 @@ import { CreateWriteOffDto } from './dto/create-write-off.dto';
 import { UpdateWriteOffDto } from './dto/update-write-off.dto';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt.guard';
 
-@Controller('api/stock')
+@Controller('stock')
 @UseGuards(OptionalJwtAuthGuard)
 export class StockController {
   constructor(private readonly stockService: StockService) {}

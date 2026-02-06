@@ -3,7 +3,7 @@ import { MaterialTypesService } from './material-types.service';
 import { CreateMaterialTypeDto } from './dto/create-material-type.dto';
 import { UpdateMaterialTypeDto } from './dto/update-material-type.dto';
 
-@Controller('api/material-types')
+@Controller('material-types')
 export class MaterialTypesController {
   constructor(private readonly materialTypesService: MaterialTypesService) {}
 

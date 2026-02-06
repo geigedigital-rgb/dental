@@ -2,7 +2,7 @@ import { Controller, Get, Patch, Body } from '@nestjs/common';
 import { SettingsService, InventorySettings } from './settings.service';
 import { InventorySettingsDto } from './dto/inventory-settings.dto';
 
-@Controller('api/settings')
+@Controller('settings')
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 

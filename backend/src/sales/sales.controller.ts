@@ -16,7 +16,7 @@ import { CreateServiceSaleDto } from './dto/create-service-sale.dto';
 import { UpdateServiceSaleDto } from './dto/update-service-sale.dto';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt.guard';
 
-@Controller('api/sales')
+@Controller('sales')
 @UseGuards(OptionalJwtAuthGuard)
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}

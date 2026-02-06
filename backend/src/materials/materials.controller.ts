@@ -3,7 +3,7 @@ import { MaterialsService } from './materials.service';
 import { CreateMaterialDto } from './dto/create-material.dto';
 import { UpdateMaterialDto } from './dto/update-material.dto';
 
-@Controller('api/materials')
+@Controller('materials')
 export class MaterialsController {
   constructor(private readonly materialsService: MaterialsService) {}
 
