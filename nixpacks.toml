@@ -1,0 +1,14 @@
+# Railway: сборка из КОРНЯ репозитория (frontend + backend в один сервис).
+# В настройках сервиса Root Directory должен быть ПУСТЫМ.
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm run start"
