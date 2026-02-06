@@ -13,10 +13,11 @@
     "@headlessui/react": "^1.7.18",
     "@heroicons/react": "^2.1.1",
     "axios": "^1.6.5",
-    "serve": "^14.2.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.21.2",
+    "recharts": "^3.7.0",
+    "serve": "^14.2.4",
     "zustand": "^4.5.0"
   },
   "devDependencies": {

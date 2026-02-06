@@ -52,6 +52,35 @@ export class ReportsController {
     );
   }
 
+  @Get('cashflow')
+  cashflow(
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('groupBy') groupBy?: 'day' | 'week' | 'month',
+  ) {
+    return this.reportsService.cashflow(
+      new Date(from || '1970-01-01'),
+      new Date(to || '2100-01-01'),
+      groupBy || 'day',
+    );
+  }
+
+  @Get('pl')
+  pl(@Query('from') from: string, @Query('to') to: string) {
+    return this.reportsService.pl(
+      new Date(from || '1970-01-01'),
+      new Date(to || '2100-01-01'),
+    );
+  }
+
+  @Get('revenue-margin-daily')
+  revenueMarginDaily(@Query('from') from: string, @Query('to') to: string) {
+    return this.reportsService.revenueMarginDaily(
+      new Date(from || '1970-01-01'),
+      new Date(to || '2100-01-01'),
+    );
+  }
+
   @Get('operation-log')
   operationLog(
     @Query('from') from?: string,

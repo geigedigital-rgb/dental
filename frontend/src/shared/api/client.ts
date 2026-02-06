@@ -103,6 +103,12 @@ export const reportsApi = {
   warehouseDashboard: () => api.get('/reports/warehouse-dashboard').then((r) => r.data),
   marginAnalysis: (from: string, to: string) =>
     api.get('/reports/margin-analysis', { params: { from, to } }).then((r) => r.data),
+  cashflow: (from: string, to: string, groupBy?: 'day' | 'week' | 'month') =>
+    api.get('/reports/cashflow', { params: { from, to, groupBy } }).then((r) => r.data),
+  pl: (from: string, to: string) =>
+    api.get('/reports/pl', { params: { from, to } }).then((r) => r.data),
+  revenueMarginDaily: (from: string, to: string) =>
+    api.get('/reports/revenue-margin-daily', { params: { from, to } }).then((r) => r.data),
   operationLog: (params?: { from?: string; to?: string; limit?: number; entityType?: string; entityId?: string }) =>
     api.get('/reports/operation-log', { params }).then((r) => r.data),
 };
