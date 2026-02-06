@@ -102,6 +102,11 @@ export class StockController {
     return this.stockService.getInventoryWithLots();
   }
 
+  @Get('materials-without-lots')
+  getMaterialsWithBalanceWithoutLots() {
+    return this.stockService.getMaterialsWithBalanceWithoutLots();
+  }
+
   @Get('materials/:materialId/lots')
   getLotsByMaterial(@Param('materialId', ParseUUIDPipe) materialId: string) {
     return this.stockService.getLotsByMaterial(materialId);

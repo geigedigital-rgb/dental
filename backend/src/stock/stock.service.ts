@@ -344,4 +344,28 @@ export class StockService {
       })
       .filter((m) => m.currentQuantity > 0);
   }
+
+  /**
+   * Материалы с остатком по движениям, но без партий (или в партиях меньше, чем остаток).
+   * Нужны для ручного списания «лишнего» остатка, чтобы не ломать FIFO.
+   */
+  async getMaterialsWithBalanceWithoutLots() {
+    const inventory = await this.getInventoryWithLots();
+    const materialsWithoutLots: { id: string; name: string; unit: string; category: string; balance: number; lotsSum: number }[] = [];
+    for (const m of inventory) {
+      const balance = m.currentQuantity;
+      const lotsSum = (m.lots ?? []).reduce((s: number, lot: any) => s + (lot.quantity ?? 0), 0);
+      if (balance > 0 && lotsSum < balance) {
+        materialsWithoutLots.push({
+          id: m.id,
+          name: m.name,
+          unit: m.unit ?? 'шт',
+          category: (m as any).category ?? '—',
+          balance,
+          lotsSum,
+        });
+      }
+    }
+    return materialsWithoutLots;
+  }
 }

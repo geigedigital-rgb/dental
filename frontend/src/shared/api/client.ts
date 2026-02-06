@@ -71,6 +71,8 @@ export const stockApi = {
   getMovements: (params?: { materialId?: string; from?: string; to?: string; limit?: number }) =>
     api.get('/stock/movements', { params }).then((r) => r.data),
   getInventoryWithLots: () => api.get('/stock/inventory-with-lots').then((r) => r.data),
+  getMaterialsWithBalanceWithoutLots: () =>
+    api.get('/stock/materials-without-lots').then((r) => r.data),
   getLotsByMaterial: (materialId: string) =>
     api.get(`/stock/materials/${materialId}/lots`).then((r) => r.data),
 };

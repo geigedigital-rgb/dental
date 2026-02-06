@@ -290,7 +290,7 @@ function StockEntriesPanel() {
   if (showForm) {
     return (
       <div className="space-y-2">
-        <CardBlock title="Приходная накладная" icon={<ArrowDownTrayIcon className="h-4 w-4" />}>
+        <CardBlock title="Приход товара на склад" icon={<ArrowDownTrayIcon className="h-4 w-4" />}>
           <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
             <div className="md:col-span-2 rounded-lg border border-gray-100 bg-gray-50/50 p-2.5">
               <p className="text-[11px] font-medium text-gray-500 mb-1.5">Общие данные</p>
@@ -363,7 +363,7 @@ function StockEntriesPanel() {
                     {form.items.length === 0 ? (
                       <tr>
                         <td colSpan={showExpiry ? 6 : 5} className="py-6 text-center text-xs text-gray-500">
-                          Нет позиций. Добавьте строку кнопкой ниже.
+                          Нет позиций. Добавьте позицию кнопкой ниже.
                         </td>
                       </tr>
                     ) : (
@@ -447,7 +447,13 @@ function StockEntriesPanel() {
                 </table>
               </div>
               <div className="mt-1.5">
-                <button type="button" onClick={addItem} className="text-xs font-medium rounded-md px-2 py-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-1">+ Строка</button>
+                <button
+                  type="button"
+                  onClick={addItem}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3882EC] focus-visible:ring-offset-1"
+                >
+                  <span className="text-gray-400 font-light leading-none">+</span> Добавить позицию
+                </button>
               </div>
             </div>
           </div>
@@ -468,7 +474,7 @@ function StockEntriesPanel() {
       <button type="button" onClick={openCreate} className="btn-primary">
         Оформить приход
       </button>
-      <CardBlock title="Приходные накладные" icon={<ArrowDownTrayIcon className="h-4 w-4" />}>
+      <CardBlock title="Приходы на склад" icon={<ArrowDownTrayIcon className="h-4 w-4" />}>
         {loading ? (
           <p className="py-4 text-center text-xs text-gray-500">Загрузка…</p>
         ) : (
@@ -540,7 +546,7 @@ function StockEntriesPanel() {
           <div className="fixed inset-0 flex items-center justify-center p-4">
             <Transition.Child as={Fragment} enter="ease-out duration-200" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100" leave="ease-in duration-150" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95">
               <Dialog.Panel className="dialog-panel max-w-lg w-full max-h-[90vh] overflow-y-auto">
-                <Dialog.Title className="dialog-title">Детали приходной накладной</Dialog.Title>
+                <Dialog.Title className="dialog-title">Детали прихода</Dialog.Title>
                 {detailLoading ? (
                   <p className="py-6 text-center text-sm text-gray-500">Загрузка…</p>
                 ) : detailEntry ? (
@@ -596,7 +602,7 @@ function StockEntriesPanel() {
           <div className="fixed inset-0 flex items-center justify-center p-4">
             <Transition.Child as={Fragment} enter="ease-out duration-200" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100" leave="ease-in duration-150" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95">
               <Dialog.Panel className="dialog-panel">
-                <Dialog.Title className="dialog-title">Удалить приходную накладную?</Dialog.Title>
+                <Dialog.Title className="dialog-title">Удалить приход?</Dialog.Title>
                 <p className="mt-2 text-sm text-gray-600">Остатки на складе не изменятся.</p>
                 <div className="mt-4 flex justify-end gap-2">
                   <button type="button" onClick={() => setShowDeleteEntryConfirm(false)} className="btn-secondary text-sm py-1.5 px-3">Отмена</button>

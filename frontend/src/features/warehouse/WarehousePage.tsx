@@ -43,7 +43,7 @@ export function WarehousePage() {
 
   // Модальное окно списания (тот же функционал, что «Ручное списание» на странице Продажи)
   const [showWriteOffModal, setShowWriteOffModal] = useState(false);
-  const [writeOffPreset, setWriteOffPreset] = useState<{ materialId: string; category: string; materialLotId: string } | null>(null);
+  const [writeOffPreset, setWriteOffPreset] = useState<{ materialId: string; category: string; materialLotId: string; quantity?: number } | null>(null);
   const [woTypes, setWoTypes] = useState<any[]>([]);
   const [woMaterials, setWoMaterials] = useState<any[]>([]);
   const [woLots, setWoLots] = useState<any[]>([]);
@@ -63,7 +63,6 @@ export function WarehousePage() {
     setLoading(true);
     stockApi.getInventoryWithLots().then(setInventoryWithLots).finally(() => setLoading(false));
   };
-
   useEffect(() => loadInventory(), []);
 
   const loadMovements = () => {
@@ -102,6 +101,7 @@ export function WarehousePage() {
           category,
           materialId: writeOffPreset.materialId,
           materialLotId: writeOffPreset.materialLotId ?? '',
+          quantity: writeOffPreset.quantity ?? f.quantity,
         }));
       } else {
         const firstCategory = typeof cats[0] === 'string' ? cats[0] : '';
@@ -127,14 +127,14 @@ export function WarehousePage() {
     stockApi.getLotsByMaterial(woForm.materialId).then(setWoLots).catch(() => setWoLots([])).finally(() => setWoLotsLoading(false));
   }, [showWriteOffModal, woForm.materialId]);
 
-  const openWriteOffModal = (preset: { materialId: string; category: string; materialLotId: string } | null) => {
+  const openWriteOffModal = (preset: { materialId: string; category: string; materialLotId: string; quantity?: number } | null) => {
     setWriteOffPreset(preset);
     setWoError('');
     setWoForm({
       category: preset?.category ?? '',
       materialId: preset?.materialId ?? '',
       materialLotId: preset?.materialLotId ?? '',
-      quantity: 1,
+      quantity: preset?.quantity ?? 1,
       reason: '',
       writeOffDate: new Date().toISOString().slice(0, 10),
     });
