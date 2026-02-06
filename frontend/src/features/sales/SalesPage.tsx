@@ -1354,6 +1354,10 @@ function ServiceSalesPanel() {
 
   const saveLineFields = (patch: Partial<ServiceLine>) => {
     if (safeSelected < 0) return;
+    if ('quantity' in patch && patch.quantity === 0) {
+      removeLine(safeSelected);
+      return;
+    }
     updateLine(safeSelected, (f) => ({ ...f, ...patch }));
   };
 
@@ -1539,15 +1543,22 @@ function ServiceSalesPanel() {
                   />
                   <div className="grid grid-cols-2 gap-1.5">
                     <div>
-                      <label className="label text-xs">Кол-во</label>
+                      <label className="label text-xs">Кол-во (0 — удалить строку)</label>
                       <input
                         type="number"
                         inputMode="numeric"
-                        min={1}
+                        min={0}
                         step={1}
                         className="input w-full py-1.5 text-sm"
-                        value={form.quantity || ''}
-                        onChange={(e) => saveLineFields({ quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                        value={form.quantity ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === '') return;
+                          const num = parseInt(v, 10);
+                          if (Number.isNaN(num)) return;
+                          if (num <= 0) saveLineFields({ quantity: 0 });
+                          else saveLineFields({ quantity: num });
+                        }}
                       />
                     </div>
                     <div>

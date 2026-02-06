@@ -264,8 +264,13 @@ export class StockMovementEngine {
       }
     }
     if (remaining > 0) {
+      const material = await tx.material.findFirst({
+        where: { id: materialId, deletedAt: null },
+        select: { name: true },
+      });
+      const name = material?.name ?? materialId;
       throw new BadRequestException(
-        `Недостаточно партий для списания по FIFO. materialId: ${materialId}, не хватает: ${remaining}`,
+        `Списание по FIFO идёт по партиям (дата прихода / срок годности), а не по общему остатку. По материалу «${name}» в партиях не хватает ${remaining} ед. Проверьте Склад → выберите материал → раздел «Партии»: там должно быть достаточно количества в партиях. Если партии не ведутся или рассинхронизированы с остатком — в Настройках можно перейти на учёт по средней.`,
       );
     }
     return quantity > 0 ? totalValue / quantity : 0;
